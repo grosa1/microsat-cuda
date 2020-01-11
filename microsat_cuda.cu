@@ -379,9 +379,11 @@ void test(int* dev_elem, int nElements) {
 	}
 }
 
-int main()
-{
-	char* filename = "C://test.dimacs";
+int main (int argc, char** argv) {
+    printf("input file: %s\n", argv[1]);
+        
+   //char* filename = "C://test.dimacs";
+    char* filename = argv[1];
 
 	int nVars = 0;
 	int nClauses = 0;
