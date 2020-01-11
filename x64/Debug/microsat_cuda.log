@@ -1,0 +1,40 @@
+﻿  Compiling CUDA source file microsat_cuda.cu...
+  
+  C:\Users\giova\Desktop\git\microsat_cuda>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.2\bin\nvcc.exe" -gencode=arch=compute_30,code=\"sm_30,compute_30\" --use-local-env -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.24.28314\bin\HostX86\x64" -x cu  -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.2\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.2\include"  -G   --keep-dir x64\Debug -maxrregcount=0  --machine 64 --compile -cudart static  -g   -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /Fdx64\Debug\vc142.pdb /FS /Zi /RTC1 /MDd " -o x64\Debug\microsat_cuda.cu.obj "C:\Users\giova\Desktop\git\microsat_cuda\microsat_cuda.cu" 
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(252): warning : expression has no effect
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(276): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(279): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(282): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(285): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(288): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(291): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(294): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(297): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(299): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(301): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(305): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(309): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(345): warning : argument is incompatible with corresponding format string conversion
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(384): warning : conversion from a string literal to "char *" is deprecated
+  
+CUDACOMPILE : ptxas warning : Stack size for entry function '_Z5solveP6solver' cannot be statically determined
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(252): warning : expression has no effect
+  
+C:/Users/giova/Desktop/git/microsat_cuda/microsat_cuda.cu(384): warning : conversion from a string literal to "char *" is deprecated
+  
+  microsat_cuda.cu
+  microsat_cuda.vcxproj -> C:\Users\giova\Desktop\git\microsat_cuda\x64\Debug\microsat_cuda.exe

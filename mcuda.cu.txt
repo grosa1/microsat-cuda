@@ -1,0 +1,692 @@
+﻿/*********************************************************************[microsat.c]***
+
+ The MIT License
+
+ Copyright (c) 2014-2018 Marijn Heule
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
+
+ *************************************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+
+typedef struct {
+	int* array;
+	int size;
+} clause;
+
+/******* Dynamic Array START ******************************************************************/
+typedef struct {
+	clause* array;
+	size_t used; // current size
+	size_t max_size; // max size
+} DynArray;
+
+void initDynArray(DynArray* a, size_t initialSize) {
+	a->array = (clause*)malloc(initialSize * sizeof(clause));
+	a->used = 0;
+	a->max_size = initialSize;
+
+	for (int i = 0; i < a->max_size; i++) {
+		a->array[i] = { 0,0 };
+	}
+}
+
+void insertDynArray(DynArray* a, clause element) {
+	// a->used is the number of used entries, because a->array[a->used++] updates a->used only *after* the array has been accessed.
+	// Therefore a->used can go up to a->size
+	if (a->used == a->max_size) {
+		a->max_size *= 2;
+		a->array = (clause*)realloc(a->array, a->max_size * sizeof(clause));
+	}
+	a->array[a->used++] = element;
+
+	for (int i = a->used; i < a->max_size; i++) {
+		a->array[i] = { 0,0 };
+	}
+}
+
+void trimDynArray(DynArray* a) {
+	// remove unused space
+	a->array = (clause*)realloc(a->array, a->used * sizeof(clause));
+	a->max_size = a->used;
+}
+
+void freeDynArray(DynArray* a) {
+	free(a->array);
+	a->array = NULL;
+	a->used = a->max_size = 0;
+}
+
+/******* Dynamic Array END ******************************************************************/
+
+enum {
+	END = -9, UNSAT = 0, SAT = 1, MARK = 2, IMPLIED = 6
+};
+
+struct solver { // The variables in the struct are described in the allocate procedure
+	int* DB, //arr
+		* buffer, //arr
+		* reason, //arr
+		* falseStack, //arr
+		* assigned; //arr
+
+	int* forced, //var
+		* processed; //var
+
+	// lista concatenata by max
+	int head, //valore della testa
+		* next, //val successivo
+		* prev, //val precedente
+		* model, //valore (se true o false)???
+		* _false, //indica se un literal � assegnato. se _false[-i] = 1 � false, se _false[i] = 1 � true, se _false[-i] = 0 e _false[i] = 0 � unassigned
+		* first; //watch della variabile, se � in qualche clausola la tiene altrimenti la reduceDB. first[-i] e first[i] per watch dei literal???
+
+	int nVars, nClauses, nConflicts, mem_used, mem_fixed, mem_max, maxLemmas, nLemmas, res, fast, slow;
+};
+
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
+{
+	if (code != cudaSuccess)
+	{
+		fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+		if (abort) exit(code);
+	}
+}
+
+__device__
+void unassign(struct solver* S, int lit) {
+	S->_false[lit] = 0;
+}   // Unassign the literal
+
+__device__
+void restart(struct solver* S) { // Perform a restart (i.e., unassign all variables)
+	while (S->assigned > S->forced)
+		unassign(S, *(--S->assigned)); // Remove all unforced false lits from falseStack
+	S->processed = S->forced;
+}                                      // Reset the processed pointer
+
+__device__
+void assignDevice(struct solver* S, int* reason, int forced) { // Make the first literal of the reason true
+	int lit = reason[0];           // Let lit be the first ltieral in the reason
+	S->_false[-lit] = forced ? IMPLIED : 1; // Mark lit as true and IMPLIED if forced
+	*(S->assigned++) = -lit;                  // Push it on the assignment stack
+	S->reason[abs(lit)] = 1 + (int)((reason)-S->DB); // Set the reason clause of lit
+	S->model[abs(lit)] = (lit > 0);
+}                              // Mark the literal as true in the model
+
+void assignHost(struct solver* S, int* reason, int forced) { // Make the first literal of the reason true
+	int lit = reason[0];           // Let lit be the first ltieral in the reason
+	S->_false[-lit] = forced ? IMPLIED : 1; // Mark lit as true and IMPLIED if forced
+	*(S->assigned++) = -lit;                  // Push it on the assignment stack
+	S->reason[abs(lit)] = 1 + (int)((reason)-S->DB); // Set the reason clause of lit
+	S->model[abs(lit)] = (lit > 0);
+}                              // Mark the literal as true in the model
+
+__device__
+void addWatch(struct solver* S, int lit, int mem) { // Add a watch pointer to a cfor entry function '_Z5solveP6solver' containing lit
+	S->DB[mem] = S->first[lit];
+	S->first[lit] = mem;
+}   // By updating the database afor entry function '_Z5solveP6solver'e pointers
+
+__device__
+int* getMemory(struct solver* S, int mem_size) { // Allocate memory of size mefor entry function '_Z5solveP6solver'e
+	if (S->mem_used + mem_size > S->mem_max) { // In case the code is used wfor entry function '_Z5solveP6solver' a code base
+		printf("c out of memory\n");
+		return (0);
+	}
+	int* store = (S->DB + S->mem_used); // Compute a pointer to the new memory location
+	S->mem_used += mem_size;               // Update the size of the used memory
+	return store;
+}                                                  // Return the pointer
+
+__device__
+int* addClauseDevice(struct solver* S, int* in, int size, int irr) { // Adds a clause stored in *in of size size
+	int i, used = S->mem_used; // Store a pointer to the beginning of the clause
+	int* clause = getMemory(S, size + 3) + 2; // Allocate memory for the clause in the database
+	if (size > 1) {
+		addWatch(S, in[0], used);         // If the clause is not unit, then add
+		addWatch(S, in[1], used + 1);
+	}                  // Two watch pointers to the datastructure
+	for (i = 0; i < size; i++)
+		clause[i] = in[i];
+	clause[i] = 0;     // Copy the clause from the buffer to the database
+	if (irr)
+		S->mem_fixed = S->mem_used;
+	else
+		S->nLemmas++;          // Update the statistics
+	return clause;
+}                            // Return the pointer to the clause is the database
+
+void addWatchHost(struct solver* S, int lit, int mem) { // Add a watch pointer to a clause containing lit
+	S->DB[mem] = S->first[lit];
+	S->first[lit] = mem;
+}               // By updating the database and the pointers
+
+int* getMemoryHost(struct solver* S, int mem_size) { // Allocate memory of size mem_size
+	if (S->mem_used + mem_size > S->mem_max) { // In case the code is used within a code base
+		printf("c out of memory\n");
+		exit(0);
+	}
+	int* store = (S->DB + S->mem_used); // Compute a pointer to the new memory location
+	S->mem_used += mem_size;               // Update the size of the used memory
+	return store;
+}                                                  // Return the pointer
+
+int* addClauseHost(struct solver* S, int* in, int size, int irr) { // Adds a clause stored in *in of size size
+	int i, used = S->mem_used; // Store a pointer to the beginning of the clause
+	int* clause = getMemoryHost(S, size + 3) + 2; // Allocate memory for the clause in the database
+	if (size > 1) {
+		addWatchHost(S, in[0], used);     // If the clause is not unit, then add
+		addWatchHost(S, in[1], used + 1);
+	}                  // Two watch pointers to the datastructure
+	for (i = 0; i < size; i++)
+		clause[i] = in[i];
+	clause[i] = 0;     // Copy the clause from the buffer to the database
+	if (irr)
+		S->mem_fixed = S->mem_used;
+	else
+		S->nLemmas++;          // Update the statistics
+	return clause;
+}
+
+__device__
+void reduceDB(struct solver* S, int k) { // Removes "less useful" lemmas from DB
+	while (S->nLemmas > S->maxLemmas)
+		S->maxLemmas += 300;      // Allow more lemmas in the future
+	S->nLemmas = 0;                                // Reset the number of lemmas
+
+	int i;
+	for (i = -S->nVars; i <= S->nVars; i++) {         // Loop over the variables
+		if (i == 0)
+			continue;
+		int* watch = &S->first[i]; // Get the pointer to the first watched clause
+		while (*watch != END)            // As long as there are watched clauses
+			if (*watch < S->mem_fixed)
+				watch = (S->DB + *watch); // Remove the watch if it points to a lemma
+			else
+				*watch = S->DB[*watch];
+	}  // Otherwise (meaning an input clause) go to next watch
+
+	int old_used = S->mem_used;
+	S->mem_used = S->mem_fixed;     // Virtually remove all lemmas
+	for (i = S->mem_fixed + 2; i < old_used; i += 3) { // While the old memory contains lemmas
+		int count = 0, head = i;  // Get the lemma to which the head is pointing
+		while (S->DB[i]) {
+			int lit = S->DB[i++];                // Count the number of literals
+			if ((lit > 0) == S->model[abs(lit)])
+				count++;
+		}        // That are satisfied by the current model
+		if (count < k)
+			addClauseDevice(S, S->DB + head, i - head, 0);
+	}
+}  // If the latter is smaller than k, add it back
+
+__device__
+void bump(struct solver* S, int lit) { // Move the variable to the front of the decision list
+	if (S->_false[lit] != IMPLIED) {
+		S->_false[lit] = MARK; // MARK the literal as involved if not a top-level unit
+		int var = abs(lit);
+		if (var != S->head) { // In case var is not already the head of the list
+			S->prev[S->next[var]] = S->prev[var];   // Update the prev link, and
+			S->next[S->prev[var]] = S->next[var];   // Update the next link, and
+			S->next[S->head] = var;          // Add a next link to the head, and
+			S->prev[var] = S->head;
+			S->head = var;
+		}
+	}
+}            // Make var the new head
+
+__device__
+int implied(struct solver* S, int lit) { // Check if lit(eral) is implied by MARK literals
+	if (S->_false[lit] > MARK)
+		return (S->_false[lit] & MARK); // If checked before return old result
+	if (!S->reason[abs(lit)])
+		return 0;                // In case lit is a decision, it is not implied
+	int* p = (S->DB + S->reason[abs(lit)] - 1);   // Get the reason of lit(eral)
+	while (*(++p))                     // While there are literals in the reason
+		if ((S->_false[*p] ^ MARK) && !implied(S, *p)) { // Recursively check if non-MARK literals are implied
+			S->_false[lit] = IMPLIED - 1;
+			return 0;
+		}             // Mark and return not implied (denoted by IMPLIED - 1)
+	S->_false[lit] = IMPLIED;
+	return 1;
+}                     // Mark and return that the literal is implied
+
+__device__
+int* analyze(struct solver* S, int* clause) { // Compute a resolvent from falsified clause
+	S->res++;
+	S->nConflicts++;                   // Bump restarts and update the statistic
+	while (*clause)
+		bump(S, *(clause++));       // MARK all literals in the falsified clause
+	while (S->reason[abs(*(--S->assigned))]) { // Loop on variables on falseStack until the last decision
+		if (S->_false[*S->assigned] == MARK) { // If the tail of the stack is MARK
+			int* check = S->assigned; // Pointer to check if first-UIP is reached
+			while (S->_false[*(--check)] != MARK) // Check for a MARK literal before decision
+				if (!S->reason[abs(*check)])
+					goto build;
+			// Otherwise it is the first-UIP so break
+			clause = S->DB + S->reason[abs(*S->assigned)]; // Get the reason and ignore first literal
+			while (*clause)
+				bump(S, *(clause++));
+		}         // MARK all literals in reason
+		unassign(S, *S->assigned);
+	}                      // Unassign the tail of the stack
+build:;
+	int size = 0, lbd = 0, flag = 0; // Build conflict clause; Empty the clause buffer
+	int* p = S->processed = S->assigned;              // Loop from tail to front
+	while (p >= S->forced) {         // Only literals on the stack can be MARKed
+		if ((S->_false[*p] == MARK) && !implied(S, *p)) { // If MARKed and not implied
+			S->buffer[size++] = *p;
+			flag = 1;
+		}              // Add literal to conflict clause buffer
+		if (!S->reason[abs(*p)]) {
+			lbd += flag;
+			flag = 0; // Increase LBD for a decision with a true flag
+			if (size == 1)
+				S->processed = p;
+		}               // And update the processed pointer
+		S->_false[*(p--)] = 1;
+	}                      // Reset the MARK flag for all variables on the stack
+
+	S->fast -= S->fast >> 5;
+	S->fast += lbd << 15;      // Update the fast moving average
+	S->slow -= S->slow >> 15;
+	S->slow += lbd << 5;      // Update the slow moving average
+
+	while (S->assigned > S->processed)     // Loop over all unprocessed literals
+		unassign(S, *(S->assigned--));  // Unassign all lits between tail & head
+	unassign(S, *S->assigned);                // Assigned now equal to processed
+	S->buffer[size] = 0;  // Terminate the buffer (and potentially print clause)
+	return addClauseDevice(S, S->buffer, size, 0);
+}          // Add new conflict clause to redundant DB
+
+__device__
+int propagate(struct solver* S) {                  // Performs unit propagation
+	printf("running propagate\n");
+
+	int forced = S->reason[abs(*S->processed)];      // Initialize forced flag
+	while (S->processed < S->assigned) {     // While unprocessed false literals
+		printf("processed loop\n");
+		int lit = *(S->processed++);            // Get first unprocessed literal
+		int* watch = &S->first[lit];           // Obtain the first watch pointer
+		while (*watch != END) { // While there are watched clauses (watched by lit)
+			int i, unit = 1;             // Let's assume that the clause is unit
+			int* clause = (S->DB + *watch + 1);	    // Get the clause from DB
+			if (clause[-2] == 0)
+				clause++;  // Set the pointer to the first literal in the clause
+			if (clause[0] == lit)
+				clause[0] = clause[1]; // Ensure that the other watched literal is in front
+			for (i = 2; unit && clause[i]; i++) // Scan the non-watched literals
+				if (!S->_false[clause[i]]) { // When clause[i] is not false, it is either true or unset
+					clause[1] = clause[i];
+					clause[i] = lit;   // Swap literals
+					int store = *watch;
+					unit = 0;             // Store the old watch
+					*watch = S->DB[*watch]; // Remove the watch from the list of lit
+					addWatch(S, clause[1], store);
+				}         // Add the watch to the list of clause[1]
+			if (unit) {                          // If the clause is indeed unit
+				clause[1] = lit;
+				watch = (S->DB + *watch); // Place lit at clause[1] and update next watch
+				if (S->_false[-clause[0]])
+					continue; // If the other watched literal is satisfied continue
+				if (!S->_false[clause[0]]) { // If the other watched literal is falsified,
+					assignDevice(S, clause, forced);
+				}             // A unit clause is found, and the reason is set
+				else {
+					if (forced)
+						return UNSAT;    // Found a root level conflict -> UNSAT
+					int* lemma = analyze(S, clause);// Analyze the conflict return a conflict clause
+					if (!lemma[1])
+						forced = 1; // In case a unit clause is found, set forced flag
+					assignDevice(S, lemma, forced);
+					break;
+				}
+			}
+		}
+	} // Assign the conflict clause as a unit
+	if (forced)
+		S->forced = S->processed;	            // Set S->forced if applicable
+	return SAT;
+}	                                    // Finally, no conflict was found
+
+__global__
+void solve(struct solver* S, int * res) {                                      // Determine satisfiability
+	int decision = S->head; S->res = 0;                               // Initialize the solver
+	for (;;) {                                                        // Main solve loop
+		int old_nLemmas = S->nLemmas;                                   // Store nLemmas to see whether propagate adds lemmas
+		if (propagate(S) == UNSAT) {
+			*res = UNSAT;
+			return;                       // Propagation returns UNSAT for a root level conflict
+		}
+
+		if (S->nLemmas > old_nLemmas) {                                 // If the last decision caused a conflict
+			decision = S->head;                                           // Reset the decision heuristic to head
+			if (S->fast > (S->slow / 100) * 125) {                        // If fast average is substantially larger than slow average
+	  //        printf("c restarting after %i conflicts (%i %i) %i\n", S->res, S->fast, S->slow, S->nLemmas > S->maxLemmas);
+				S->res = 0; S->fast = (S->slow / 100) * 125; restart(S);   // Restart and update the averages
+				if (S->nLemmas > S->maxLemmas) reduceDB(S, 6);
+			}
+		}         // Reduce the DB when it contains too many lemmas
+
+		while (S->_false[decision] || S->_false[-decision]) {             // As long as the temporay decision is assigned
+			decision = S->prev[decision];
+		}                               // Replace it with the next variable in the decision list
+		if (decision == 0) {
+			*res = SAT;
+			return;                                  // If the end of the list is reached, then a solution is found
+		}
+		decision = S->model[decision] ? decision : -decision;           // Otherwise, assign the decision variable based on the model
+		S->_false[-decision] = 1;                                        // Assign the decision literal to true (change to IMPLIED-1?)
+		*(S->assigned++) = -decision;                                   // And push it on the assigned stack
+		decision = abs(decision); S->reason[decision] = 0;
+	}
+}          // Decisions have no reason clauses
+
+__global__
+void initCDCLDevice(struct solver* S) {
+	int n = S->nVars;
+	//int m = *m_d;
+
+	if (n < 1)
+		n = 1;           // The code assumes that there is at least one variable
+
+	//TODO eliminare variabili gi� assegnate da CudaMemCpy
+	//S->nVars = n;                  // Set the number of variables
+	//S->nClauses = m;                  // Set the number of clauases
+	S->mem_max = 1 << 30;            // Set the initial maximum memory
+	S->mem_used = 0;               // The number of integers allocated in the DB
+	S->nLemmas = 0;  // The number of learned clauses -- redundant means learned
+	S->nConflicts = 0;     // Under of conflicts which is used to updates scores
+	S->maxLemmas = 2000;             // Initial maximum number of learnt clauses
+	S->fast = S->slow = 1 << 24; // Initialize the fast and slow moving averages
+
+	S->DB = (int*)malloc(sizeof(int) * S->mem_max); // Allocate the initial database
+	S->model = getMemory(S, n + 1); // Full assignment of the (Boolean) variables (initially set to false)
+	S->next = getMemory(S, n + 1); // Next variable in the heuristic order
+	S->prev = getMemory(S, n + 1); // Previous variable in the heuristic order
+	S->buffer = getMemory(S, n); // A buffer to store a temporary clause
+	S->reason = getMemory(S, n + 1); // Array of clauses
+	S->falseStack = getMemory(S, n + 1); // Stack of falsified literals -- this pointer is never changed
+	S->forced = S->falseStack; // Points inside *falseStack at first decision (unforced literal)
+	S->processed = S->falseStack; // Points inside *falseStack at first unprocessed literal
+	S->assigned = S->falseStack; // Points inside *falseStack at last unprocessed literal
+	S->_false = getMemory(S, 2 * n + 1);
+	S->_false += n; // Labels for variables, non-zero means false
+	S->first = getMemory(S, 2 * n + 1);
+	S->first += n; // Offset of the first watched clause
+	S->DB[S->mem_used++] = 0; // Make sure there is a 0 before the clauses are loaded.
+
+	int i;
+	for (i = 1; i <= n; i++) {              // Initialize the main datastructes:
+		S->prev[i] = i - 1;
+		S->next[i - 1] = i; // the double-linked list for variable-move-to-front,
+		S->model[i] = S->_false[-i] = S->_false[i] = 0; // the model (phase-saving), the false array,
+		S->first[i] = S->first[-i] = END;
+	}                    // and first (watch pointers).
+	S->head = n;
+}                               // Initialize the head of the double-linked list
+
+void initCDCL(struct solver* S, int n, int m) {
+	if (n < 1)
+		n = 1;           // The code assumes that there is at least one variable
+	S->nVars = n;                  // Set the number of variables
+	S->nClauses = m;                  // Set the number of clauases
+	S->mem_max = 1 << 30;            // Set the initial maximum memory
+	S->mem_used = 0;               // The number of integers allocated in the DB
+	S->nLemmas = 0;  // The number of learned clauses -- redundant means learned
+	S->nConflicts = 0;     // Under of conflicts which is used to updates scores
+	S->maxLemmas = 2000;             // Initial maximum number of learnt clauses
+	S->fast = S->slow = 1 << 24; // Initialize the fast and slow moving averages
+
+	S->DB = (int*)malloc(sizeof(int) * S->mem_max); // Allocate the initial database
+	//cudaMallocManaged(&S->DB, sizeof(int) * S->mem_max); // Allocate the initial database
+	S->model = getMemoryHost(S, n + 1); // Full assignment of the (Boolean) variables (initially set to false)
+	S->next = getMemoryHost(S, n + 1); // Next variable in the heuristic order
+	S->prev = getMemoryHost(S, n + 1); // Previous variable in the heuristic order
+	S->buffer = getMemoryHost(S, n); // A buffer to store a temporary clause
+	S->reason = getMemoryHost(S, n + 1); // Array of clauses
+	S->falseStack = getMemoryHost(S, n + 1); // Stack of falsified literals -- this pointer is never changed
+	S->forced = S->falseStack; // Points inside *falseStack at first decision (unforced literal)
+	S->processed = S->falseStack; // Points inside *falseStack at first unprocessed literal
+	S->assigned = S->falseStack; // Points inside *falseStack at last unprocessed literal
+	S->_false = getMemoryHost(S, 2 * n + 1);
+	S->_false += n; // Labels for variables, non-zero means false
+	S->first = getMemoryHost(S, 2 * n + 1);
+	S->first += n; // Offset of the first watched clause
+	S->DB[S->mem_used++] = 0; // Make sure there is a 0 before the clauses are loaded.
+
+	int i;
+	for (i = 1; i <= n; i++) {              // Initialize the main datastructes:
+		S->prev[i] = i - 1;
+		S->next[i - 1] = i; // the double-linked list for variable-move-to-front,
+		S->model[i] = S->_false[-i] = S->_false[i] = 0; // the model (phase-saving), the false array,
+		S->first[i] = S->first[-i] = END;
+	}                    // and first (watch pointers).
+	S->head = n;
+}                               // Initialize the head of the double-linked list
+
+static void read_until_new_line(FILE* input) {
+	int ch;
+	while ((ch = getc(input)) != '\n')
+		if (ch == EOF) {
+			printf("parse error: unexpected EOF");
+			exit(1);
+		}
+}
+
+__global__
+void parseDevice(struct solver* S, int* clause_arr, int* clause_size, int* res) { // Parse the formula and initialize
+//printf("%d\n", *clause_size);
+//	for (int i = 0; i < *clause_size; ++i) {
+//	printf("%d ", clause_arr[i]);
+//}
+
+	int size = *clause_size;
+
+	int* clause = addClauseDevice(S, clause_arr, size, 1); // Then add the clause to data_base
+	if (!size || ((size == 1) && S->_false[clause[0]])) { // Check for empty clause or conflicting unit
+		*res = UNSAT;
+		return;                 // If either is found return UNSAT
+	}
+	if ((size == 1) && !S->_false[-clause[0]]) { // Check for a new unit
+		assignDevice(S, clause, 1);
+	}                          // Directly assign new units (forced = 1)
+
+	*res = SAT;
+}
+
+int parse(struct solver* S, char* filename, DynArray* clause_array) { // Parse the formula and initialize
+	int tmp;
+	FILE* input = fopen(filename, "r");                     // Read the CNF file
+	while ((tmp = getc(input)) == 'c')
+		read_until_new_line(input);
+	ungetc(tmp, input);
+
+	do {
+		tmp = fscanf(input, " p cnf %i %i \n", &S->nVars, &S->nClauses); // Find the first non-comment line
+		if (tmp > 0 && tmp != EOF)
+			break;
+		tmp = fscanf(input, "%*s\n");
+	}    // In case a commment line was found
+	while (tmp != 2 && tmp != EOF);                // Skip it and read next line
+
+	initCDCL(S, S->nVars, S->nClauses);      // Allocate the main datastructures
+	int nZeros = S->nClauses, size = 0; // Initialize the number of clauses to read
+
+	/*init dynamic array di clause = file dimacs*/
+	initDynArray(clause_array, S->nClauses); //init array di clauses, al minimo size=n clausole, incremento dinamico x1.5 della size
+
+	while (nZeros > 0) {                  // While there are clauses in the file
+		int ch = getc(input);
+		if (ch == ' ' || ch == '\n')
+			continue;
+		if (ch == 'c') {
+			read_until_new_line(input);
+			continue;
+		}
+		ungetc(ch, input);
+		int lit = 0;
+		tmp = fscanf(input, " %i ", &lit);       // Read a literal
+		//printf("%i ", lit);
+
+		if (!lit) {                         // If reaching the end of the clause
+
+			clause _clause;
+			_clause.array = (int*)malloc(sizeof(int) * size);
+			memcpy(_clause.array, S->buffer, sizeof(int) * size);
+			_clause.size = size;
+			insertDynArray(clause_array, _clause);
+
+			int* clause = addClauseHost(S, S->buffer, size, 1); // Then add the clause to data_base
+			if (!size || ((size == 1) && S->_false[clause[0]])) // Check for empty clause or conflicting unit
+				return UNSAT;                 // If either is found return UNSAT
+			if ((size == 1) && !S->_false[-clause[0]]) { // Check for a new unit
+				assignHost(S, clause, 1);
+			}                          // Directly assign new units (forced = 1)
+			size = 0;
+			--nZeros;
+		}                                // Reset buffer
+		else
+			S->buffer[size++] = lit;
+	}                        // Add literal to buffer
+
+	fclose(input);                                     // Close the formula file
+
+	trimDynArray(clause_array); //remove unused space from clause array
+
+	/*TEST*/
+	//printf("used %d\n", out_lit_array->used);
+	//printf("size %d\n", out_lit_array->max_size);
+	//printf("clauses %d\n", out_lit_array->n_clauses);
+	//printf("vars %d\n", out_lit_array->n_vars);
+
+	//for (int i = 0; i < out_lit_array->used; i++)
+	//{
+	//	printf("%i ", out_lit_array->array[i]);
+	//	if (out_lit_array->array[i] == 0) {
+	//		printf("\n");
+	//	}
+	//}
+		/*TEST*/
+
+
+	return SAT;
+}                                        // Return that no conflict was observed
+
+int main(int argc, char** argv) {// The main procedure for a STANDALONE solver
+	printf("file %s\n", argv[1]);
+
+	cudaDeviceReset();
+
+	DynArray clause_array;
+
+	struct solver S;
+	struct solver* _solver = &S;
+	struct solver* solver_d = 0;
+	struct solver* solver_h = 0;
+
+	clause* clause_d = 0;
+	int* clause_arr_d = 0;
+
+	int sol = UNSAT;
+	int* result_h = &sol;
+	int* result_d = 0;
+
+	clock_t start, end;
+	printf("starting\n");
+	start = clock();
+	int parse_res = parse(&S, argv[1], &clause_array); // Create the solver datastructure
+	if (parse_res == UNSAT) {
+		printf("s UNSATISFIABLE\n");
+		return 0;  // Parse the DIMACS file in argv[1]
+	}
+	printf("parsing cpu done\n");
+
+	cudaMallocManaged(&result_h, sizeof(int));
+
+	solve << <1, 1 >> > (_solver, result_h);
+	gpuErrchk(cudaDeviceSynchronize());
+
+	/*gpuErrchk(cudaMalloc((void**)&solver_d, sizeof(solver)));
+	gpuErrchk(cudaMalloc((void**)&result_d, sizeof(int)));
+	gpuErrchk(cudaMemcpy(solver_d, &S, sizeof(solver), cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpy(result_d, result_h, sizeof(int), cudaMemcpyHostToDevice));*/
+
+	cudaError_t error = cudaGetLastError();
+	printf("CUDA error: %s\n", cudaGetErrorString(error));
+
+	//initCDCLDevice << <1, 1 >> > (solver_d);
+	error = cudaGetLastError();
+	printf("CUDA error: %s\n", cudaGetErrorString(error));
+
+	gpuErrchk(cudaDeviceSynchronize());
+
+	for (int i = 0; i < clause_array.used; i++) {
+		clause _clause = clause_array.array[i];
+		int* clause_size_d = 0;
+
+		//gpuErrchk(cudaMalloc((void**)&clause_size_d, sizeof(int)));
+		//gpuErrchk(cudaMalloc((void**)&clause_arr_d, sizeof(int) * _clause.size));
+		//gpuErrchk(cudaMemcpy(clause_arr_d, _clause.array, sizeof(int) * _clause.size, cudaMemcpyHostToDevice));
+		//gpuErrchk(cudaMemcpy(clause_size_d, &_clause.size, sizeof(int), cudaMemcpyHostToDevice));
+
+		//parseDevice << <1, 1 >> > (solver_d, clause_arr_d, clause_size_d, result_d);
+		error = cudaGetLastError();
+		printf("CUDA error: %s\n", cudaGetErrorString(error));
+
+		//gpuErrchk(cudaMemcpy(result_h, result_d, sizeof(int), cudaMemcpyDeviceToHost));
+		//if (*result_h == UNSAT) return -1;
+
+		gpuErrchk(cudaFree(clause_arr_d));
+		break;
+	}
+
+	//solve << <1, 1>> > (solver_d, res_d, _reason, _processed);
+	gpuErrchk(cudaPeekAtLastError());
+	gpuErrchk(cudaDeviceSynchronize());
+	//gpuErrchk(cudaMemcpy(solver_h, solver_d, sizeof(solver), cudaMemcpyDeviceToHost));
+	//gpuErrchk(cudaMemcpy(sol_h, sol_d, sizeof(int), cudaMemcpyDeviceToHost));
+
+//	if (*result_h == SAT) {
+//		printf("SAT %d\n", *result_h);
+//	}
+//	else if (*result_h == UNSAT) {
+//		printf("UNSAT %d\n", *result_h);
+//	}
+//	else {
+//		printf("UNDEFINED %d\n", *result_h);
+//	}
+
+	// if (solve (&S)          == UNSAT) printf("s UNSATISFIABLE\n");  // Solve without limit (number of conflicts)
+	cudaDeviceReset(); //  printf("s SATISFIABLE\n")  ;  // And print whether the formula has a solution
+	end = clock();
+	//report_gpu_mem();
+	printf("c statistics of %s: mem: %i conflicts: %i max_lemmas: %i\n", argv[1], S.mem_used, S.nConflicts, S.maxLemmas);
+	printf("cpu time: %f s\n", (float)(end - start) / 1000000);
+	return 0;
+}
+
