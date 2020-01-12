@@ -1,28 +1,28 @@
-﻿/*********************************************************************[microsat.c]***
-
- The MIT License
-
- Copyright (c) 2014-2018 Marijn Heule
-
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
-
- The above copyright notice and this permission notice shall be included in all
- copies or substantial portions of the Software.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- SOFTWARE.
-
- *************************************************************************************/
+﻿/////*********************************************************************[microsat.c]***
+//
+// The MIT License
+//
+// Copyright (c) 2014-2018 Marijn Heule
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//
+// *************************************************************************************/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,7 +31,7 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-typedef struct {
+	typedef struct {
 	int* array;
 	int size;
 } clause;
@@ -325,11 +325,11 @@ build:;
 
 __device__
 int propagate(struct solver* S) {                  // Performs unit propagation
-	printf("running propagate\n");
+	//printf("running propagate\n");
 
 	int forced = S->reason[abs(*S->processed)];      // Initialize forced flag
 	while (S->processed < S->assigned) {     // While unprocessed false literals
-		printf("processed loop\n");
+		//printf("processed loop\n");
 		int lit = *(S->processed++);            // Get first unprocessed literal
 		int* watch = &S->first[lit];           // Obtain the first watch pointer
 		while (*watch != END) { // While there are watched clauses (watched by lit)
@@ -357,8 +357,10 @@ int propagate(struct solver* S) {                  // Performs unit propagation
 					assignDevice(S, clause, forced);
 				}             // A unit clause is found, and the reason is set
 				else {
-					if (forced)
+					if (forced) {
+						//printf("UNSAT %d.\n", __LINE__);;
 						return UNSAT;    // Found a root level conflict -> UNSAT
+					}
 					int* lemma = analyze(S, clause);// Analyze the conflict return a conflict clause
 					if (!lemma[1])
 						forced = 1; // In case a unit clause is found, set forced flag
@@ -370,16 +372,18 @@ int propagate(struct solver* S) {                  // Performs unit propagation
 	} // Assign the conflict clause as a unit
 	if (forced)
 		S->forced = S->processed;	            // Set S->forced if applicable
+	
+	//printf("SAT %d.\n", __LINE__);
 	return SAT;
 }	                                    // Finally, no conflict was found
 
 __global__
-void solve(struct solver* S, int * res) {                                      // Determine satisfiability
+void solve(struct solver* S) {                                      // Determine satisfiability
 	int decision = S->head; S->res = 0;                               // Initialize the solver
 	for (;;) {                                                        // Main solve loop
 		int old_nLemmas = S->nLemmas;                                   // Store nLemmas to see whether propagate adds lemmas
 		if (propagate(S) == UNSAT) {
-			*res = UNSAT;
+			printf("UNSAT %d.\n", __LINE__);
 			return;                       // Propagation returns UNSAT for a root level conflict
 		}
 
@@ -396,7 +400,7 @@ void solve(struct solver* S, int * res) {                                      /
 			decision = S->prev[decision];
 		}                               // Replace it with the next variable in the decision list
 		if (decision == 0) {
-			*res = SAT;
+			printf("SAT %d.\n", __LINE__);
 			return;                                  // If the end of the list is reached, then a solution is found
 		}
 		decision = S->model[decision] ? decision : -decision;           // Otherwise, assign the decision variable based on the model
@@ -407,7 +411,7 @@ void solve(struct solver* S, int * res) {                                      /
 }          // Decisions have no reason clauses
 
 __global__
-void initCDCLDevice(struct solver* S) {
+void initCDCLDevice(struct solver* S, int * db) {
 	int n = S->nVars;
 	//int m = *m_d;
 
@@ -417,14 +421,14 @@ void initCDCLDevice(struct solver* S) {
 	//TODO eliminare variabili gi� assegnate da CudaMemCpy
 	//S->nVars = n;                  // Set the number of variables
 	//S->nClauses = m;                  // Set the number of clauases
-	S->mem_max = 1 << 30;            // Set the initial maximum memory
+	S->mem_max = 100000; //1 << 30;            // Set the initial maximum memory
 	S->mem_used = 0;               // The number of integers allocated in the DB
 	S->nLemmas = 0;  // The number of learned clauses -- redundant means learned
 	S->nConflicts = 0;     // Under of conflicts which is used to updates scores
 	S->maxLemmas = 2000;             // Initial maximum number of learnt clauses
 	S->fast = S->slow = 1 << 24; // Initialize the fast and slow moving averages
 
-	S->DB = (int*)malloc(sizeof(int) * S->mem_max); // Allocate the initial database
+	S->DB = db;  // (int*)malloc(sizeof(int) * S->mem_max); // Allocate the initial database
 	S->model = getMemory(S, n + 1); // Full assignment of the (Boolean) variables (initially set to false)
 	S->next = getMemory(S, n + 1); // Next variable in the heuristic order
 	S->prev = getMemory(S, n + 1); // Previous variable in the heuristic order
@@ -499,24 +503,25 @@ static void read_until_new_line(FILE* input) {
 }
 
 __global__
-void parseDevice(struct solver* S, int* clause_arr, int* clause_size, int* res) { // Parse the formula and initialize
+void parseDevice(struct solver* S, int* clause_arr, int* clause_size) { // Parse the formula and initialize
 //printf("%d\n", *clause_size);
 //	for (int i = 0; i < *clause_size; ++i) {
 //	printf("%d ", clause_arr[i]);
 //}
 
 	int size = *clause_size;
+	//printf("%d \n", size);
 
 	int* clause = addClauseDevice(S, clause_arr, size, 1); // Then add the clause to data_base
 	if (!size || ((size == 1) && S->_false[clause[0]])) { // Check for empty clause or conflicting unit
-		*res = UNSAT;
+		printf("UNSAT %d.\n", __LINE__);
 		return;                 // If either is found return UNSAT
 	}
 	if ((size == 1) && !S->_false[-clause[0]]) { // Check for a new unit
 		assignDevice(S, clause, 1);
 	}                          // Directly assign new units (forced = 1)
 
-	*res = SAT;
+	//printf("SAT %d.\n", __LINE__);
 }
 
 int parse(struct solver* S, char* filename, DynArray* clause_array) { // Parse the formula and initialize
@@ -562,8 +567,10 @@ int parse(struct solver* S, char* filename, DynArray* clause_array) { // Parse t
 			insertDynArray(clause_array, _clause);
 
 			int* clause = addClauseHost(S, S->buffer, size, 1); // Then add the clause to data_base
-			if (!size || ((size == 1) && S->_false[clause[0]])) // Check for empty clause or conflicting unit
-				return UNSAT;                 // If either is found return UNSAT
+			if (!size || ((size == 1) && S->_false[clause[0]])) { // Check for empty clause or conflicting unit
+				return UNSAT;        // If either is found return UNSAT
+				
+			}
 			if ((size == 1) && !S->_false[-clause[0]]) { // Check for a new unit
 				assignHost(S, clause, 1);
 			}                          // Directly assign new units (forced = 1)
@@ -626,20 +633,19 @@ int main(int argc, char** argv) {// The main procedure for a STANDALONE solver
 	}
 	printf("parsing cpu done\n");
 
-	cudaMallocManaged(&result_h, sizeof(int));
+	//cudaMallocManaged(&result_h, sizeof(int));
 
-	solve << <1, 1 >> > (_solver, result_h);
-	gpuErrchk(cudaDeviceSynchronize());
-
-	/*gpuErrchk(cudaMalloc((void**)&solver_d, sizeof(solver)));
-	gpuErrchk(cudaMalloc((void**)&result_d, sizeof(int)));
+	gpuErrchk(cudaMalloc((void**)&solver_d, sizeof(solver)));
 	gpuErrchk(cudaMemcpy(solver_d, &S, sizeof(solver), cudaMemcpyHostToDevice));
-	gpuErrchk(cudaMemcpy(result_d, result_h, sizeof(int), cudaMemcpyHostToDevice));*/
+
+	int* db;
+	int mem = 100000;
+	gpuErrchk(cudaMalloc((void**)&db, sizeof(int) * mem));
 
 	cudaError_t error = cudaGetLastError();
 	printf("CUDA error: %s\n", cudaGetErrorString(error));
 
-	//initCDCLDevice << <1, 1 >> > (solver_d);
+	initCDCLDevice << <1, 1 >> > (solver_d, db);
 	error = cudaGetLastError();
 	printf("CUDA error: %s\n", cudaGetErrorString(error));
 
@@ -649,12 +655,12 @@ int main(int argc, char** argv) {// The main procedure for a STANDALONE solver
 		clause _clause = clause_array.array[i];
 		int* clause_size_d = 0;
 
-		//gpuErrchk(cudaMalloc((void**)&clause_size_d, sizeof(int)));
-		//gpuErrchk(cudaMalloc((void**)&clause_arr_d, sizeof(int) * _clause.size));
-		//gpuErrchk(cudaMemcpy(clause_arr_d, _clause.array, sizeof(int) * _clause.size, cudaMemcpyHostToDevice));
-		//gpuErrchk(cudaMemcpy(clause_size_d, &_clause.size, sizeof(int), cudaMemcpyHostToDevice));
+		gpuErrchk(cudaMalloc((void**)&clause_size_d, sizeof(int)));
+		gpuErrchk(cudaMalloc((void**)&clause_arr_d, sizeof(int) * _clause.size));
+		gpuErrchk(cudaMemcpy(clause_arr_d, _clause.array, sizeof(int) * _clause.size, cudaMemcpyHostToDevice));
+		gpuErrchk(cudaMemcpy(clause_size_d, &_clause.size, sizeof(int), cudaMemcpyHostToDevice));
 
-		//parseDevice << <1, 1 >> > (solver_d, clause_arr_d, clause_size_d, result_d);
+		parseDevice << <1, 1 >> > (solver_d, clause_arr_d, clause_size_d);
 		error = cudaGetLastError();
 		printf("CUDA error: %s\n", cudaGetErrorString(error));
 
@@ -662,10 +668,10 @@ int main(int argc, char** argv) {// The main procedure for a STANDALONE solver
 		//if (*result_h == UNSAT) return -1;
 
 		gpuErrchk(cudaFree(clause_arr_d));
-		break;
+		//break;
 	}
 
-	//solve << <1, 1>> > (solver_d, res_d, _reason, _processed);
+	solve << <1, 1>> > (solver_d);
 	gpuErrchk(cudaPeekAtLastError());
 	gpuErrchk(cudaDeviceSynchronize());
 	//gpuErrchk(cudaMemcpy(solver_h, solver_d, sizeof(solver), cudaMemcpyDeviceToHost));
@@ -689,4 +695,3 @@ int main(int argc, char** argv) {// The main procedure for a STANDALONE solver
 	printf("cpu time: %f s\n", (float)(end - start) / 1000000);
 	return 0;
 }
-
