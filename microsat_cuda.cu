@@ -24,9 +24,17 @@ struct solver { // The variables in the struct are described in the allocate pro
 		* reason, * falseStack, * _false, * first, * forced, * processed, * assigned, * next, * prev, head, res, fast, slow;
 };
 
+typedef struct {
+	int files_count;
+	float parse_time;
+	float init_time;
+	float solve_time;
+	float tot_time;
+} Metrics;
+
 enum { END = -9, UNSAT = 0, SAT = 1, MARK = 2, IMPLIED = 6 };
 
-__device__ 
+__device__
 int* getMemory(struct solver* S, int mem_size) {                  // Allocate memory of size mem_size
 	if (S->mem_used + mem_size > S->mem_max) {                       // In case the code is used within a code base
 		printf("c out of memory\n");
@@ -55,12 +63,12 @@ void assign(struct solver* S, int* reason, int forced) {          // Make the fi
 	S->model[abs(lit)] = (lit > 0);
 }                              // Mark the literal as true in the model
 
-__device__ 
+__device__
 void addWatch(struct solver* S, int lit, int mem) {               // Add a watch pointer to a cfor entry function '_Z5solveP6solver' containing lit
 	S->DB[mem] = S->first[lit]; S->first[lit] = mem;
 }               // By updating the database afor entry function '_Z5solveP6solver'e pointers
 
-__device__ 
+__device__
 int* addClause(struct solver* S, int* buffer, int size, int irr) {    // Adds a clause stored in *in of size size
 	int i, used = S->mem_used;                                       // Store a pointer to the beginning of the clause
 	int* clause = getMemory(S, size + 3) + 2;                       // Allocate memory for the clause in the database
@@ -218,7 +226,7 @@ void solve(struct solver** multi_s) {                                      // De
 		int res = propagate(S);
 		if (res == UNSAT) {
 			printf("\n file %d = UNSAT \n",threadIdx.x);
-			S->result = 1;
+			S->result = UNSAT;
 			//printf("result -->", S->result);
 			return;
 		}                                                               // Propagation returns UNSAT for a root level conflict
@@ -238,7 +246,7 @@ void solve(struct solver** multi_s) {                                      // De
 		//printf("decision: %d \n", decision);                               // Replace it with the next variable in the decision list
 		if (decision == 0) {
 			printf("\n file %d = SAT \n", threadIdx.x);
-			S->result = 0;
+			S->result = SAT;
 			//printf("result -->", S->result );
 			return;                                  // If the end of the list is reached, then a solution is found
 		}
@@ -249,7 +257,7 @@ void solve(struct solver** multi_s) {                                      // De
 	}
 }          // Decisions have no reason clauses
 
-__global__ 
+__global__
 void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nClauses, int* db) {                            // Parse the formula and initialize
 	int verb = 0;
 	if (verb)("\n init \n");
@@ -274,13 +282,13 @@ void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nCl
 	if (verb)printf("\n S->slow -> %d\n", S->slow);
 	S->result = -1;
 	if (verb)printf("\n S->result -> %d\n", S->result);
-	
+
 	S->DB = db;
 	if (verb)printf("\n S->DB -> %d \n", S->DB);
 
 	S->model = getMemory(S, S->nVars + 1); // Full assignment of the (Boolean) variables (initially set to false)
 	if (verb)printf("\n S->model -> %d \n", S->model);
-	
+
 	S->next = getMemory(S, S->nVars + 1); // Next variable in the heuristic order
 	if (verb)printf("\n S->next -> %d \n", S->next);
 
@@ -303,11 +311,11 @@ void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nCl
 	S->assigned = S->falseStack;      // Points inside *falseStack at last unprocessed literal
 	if (verb)printf("\n S->assigned -> %d \n", S->assigned);
 
-	S->_false = getMemory(S, 2 * S->nVars + 1); 
+	S->_false = getMemory(S, 2 * S->nVars + 1);
 	S->_false += S->nVars; // Labels for variables, non-zero means false
 	if (verb)printf("\n S->_false -> %d \n", S->_false);
 
-	S->first = getMemory(S, 2 * S->nVars + 1); 
+	S->first = getMemory(S, 2 * S->nVars + 1);
 	S->first += S->nVars; // Offset of the first watched clause
 	if (verb)printf("\n S->first -> %d \n", S->first);
 
@@ -316,13 +324,13 @@ void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nCl
 
 	if (verb)printf("\n elements \n");
 	int i; for (i = 1; i <= S->nVars; i++) {							// Initialize the main datastructes:
-		S->prev[i] = i - 1; 
+		S->prev[i] = i - 1;
 		if (verb)printf("\n S->prev[i] -> %d \n", S->prev[i]);
 
-		S->next[i - 1] = i;               
+		S->next[i - 1] = i;
 		if (verb)printf("\n S->next[i-1] -> %d \n", S->next[i - 1]);
 
-		S->model[i] = S->_false[-i] = S->_false[i] = 0;        
+		S->model[i] = S->_false[-i] = S->_false[i] = 0;
 		if (verb)printf("\n S->model[i] -> %d \n", S->model[i]);
 		if (verb)printf("\n S->_false[i] -> %d \n", S->_false[i]);
 		if (verb)printf("\n S->_false[-i] -> %d \n", S->_false[-i]);
@@ -346,11 +354,11 @@ void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nCl
 			if (verb)printf("\n addClause \n");
 			int* clause = addClause(S, S->buffer, size, 1);     // Then add the clause to data_base
 			if (verb)printf("\n clause -> %d \n", clause);
-			
+
 			if (verb)printf("\n size -> %d \n", size);
 			if (verb)printf("\n S->_false[clause[0]] -> %d \n", S->_false[clause[0]]);
 			if (!size || ((size == 1) && S->_false[clause[0]])) {  // Check for empty clause or conflicting unit
-				
+
 				printf("\n + UNSAT + \n");
 				S->result = 1;
 				return;
@@ -360,25 +368,26 @@ void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nCl
 				assign(S, clause, 1);
 			}                           // Directly assign new units (forced = 1)
 			size = 0; --nZeros;
-		}                                
+		}
 		else S->buffer[size++] = lit;
-	}      
+	}
 	//printf("\n INITIALIZED \n");
 }                                            // Return that no conflict was observed
 
-__host__ 
+__host__
 static void read_until_new_line(FILE* input) {
 	int ch;
 	while ((ch = getc(input)) != '\n')
 		if (ch == EOF) { printf("parse error: unexpected EOF"); exit(1); }
 }
 
-int main()
-{	
-	char* directory = "C://microsat//sat";
+ int main(int argc, char** argv) {
+	//char* directory = "C://microsat//sat";
+	char* directory = argv[1];
 	int num_file =0;
 	int nVars = 0;
 	int nClauses = 0;
+	Metrics exec_metrics = {0, 0, 0, 0, 0};
 
 	clock_t start, end;
 	printf(" Start\n");
@@ -393,6 +402,7 @@ int main()
 		}
 	}
 	closedir(dirp);
+	exec_metrics.files_count = num_file;
 	//printf(" num file -> %d\n",num_file);
 
 	solver** h_multi_struct;
@@ -414,8 +424,8 @@ int main()
 			continue;
 		if (!strcmp(entry->d_name, ".."))
 			continue;
-		
-		char path[100] = "";
+
+		char path[100] = ""; //TODO: magic number
 		strcpy(path, directory);
 		strcat(path, "//");
 		strcat(path, entry->d_name);
@@ -432,7 +442,7 @@ int main()
 		gpuErrchk(cudaMalloc((void**)&dev_s, sizeof(solver)));
 
 		int* db;
-		int mem = 100000;
+		int mem = 100000; //TODO: allocazione dinamica della memoria
 		gpuErrchk(cudaMalloc((void**)&db, sizeof(int) * mem));
 
 		struct stat st;
@@ -442,7 +452,9 @@ int main()
 
 		int* buffer = 0;
 		buffer = (int*)malloc(size * sizeof(int));
-		
+
+		clock_t start_parse = clock();
+		/********* FILE PARSER **************/
 		int tmp;
 		while ((tmp = getc(input)) == 'c') read_until_new_line(input);
 		ungetc(tmp, input);
@@ -454,13 +466,14 @@ int main()
 		int nElements = 0;
 		do {
 			int ch = getc(input);
+			if(ch == '\%') break; //we have % as EOF in some dimacs files
 			if ( ch == ' ' || ch == '\n') continue;
 			if (ch == 'c') { read_until_new_line(input); continue; }
 			ungetc(ch, input);
 			int lit = 0;
 			tmp = fscanf(input, " %i ", &lit);
 			buffer[nElements] = lit;
-			//printf("\n lit -> %d\n", lit);
+			//printf("%d ", lit);
 			nElements++;
 		} while (tmp != EOF);
 
@@ -471,6 +484,7 @@ int main()
 			elements[i] = buffer[i];
 		}
 		fclose(input);
+		/********* FILE PARSER **************/
 
 		int* dev_elements;
 		cudaMalloc((void**)&dev_elements, nElements * sizeof(int));
@@ -478,6 +492,7 @@ int main()
 
 		free(buffer);
 		free(elements);
+		exec_metrics.parse_time += (clock() - start_parse);
 
 
 	cudaDeviceSetLimit(cudaLimitMallocHeapSize, 128 * 1024 * 1024);
@@ -499,7 +514,8 @@ int main()
 	cudaEventDestroy(d_stop);
 
 	printf("parsing_file -> %s\n", entry->d_name);
-	printf("device_time -> %f s\n", elapsedTime / 1000000);
+	//printf("device_time -> %f s\n", elapsedTime / 1000000);
+	//exec_metrics.init_time += elapsedTime / 1000000;
 
 	cudaDeviceSynchronize();
 
@@ -507,18 +523,18 @@ int main()
 	//printf("\n dev_s -> %p\n",dev_s);
 	h_multi_struct[count] = dev_s;
 	count++;
-	} 
+	}
 
 	cudaMemcpy(d_multi_struct, h_multi_struct, num_file * sizeof(solver*), cudaMemcpyHostToDevice);
 	//temp end
-	
+
 	printf("\n SOLVE \n");
 	cudaEvent_t d_start, d_stop;
 	cudaEventCreate(&d_start);
 	cudaEventCreate(&d_stop);
 
 	cudaEventRecord(d_start, 0);
-	solve<< <1,num_file >> > (d_multi_struct);
+	solve<< <1, num_file >> > (d_multi_struct);
 	cudaEventRecord(d_stop, 0);
 	cudaEventSynchronize(d_stop);
 
@@ -528,14 +544,17 @@ int main()
 	cudaEventDestroy(d_start);
 	cudaEventDestroy(d_stop);
 
-	printf("\n solve time -> %f s\n", elapsedTime / 1000000);
+	//printf("\n total solve time -> %f s\n", elapsedTime / 1000000);
+	exec_metrics.solve_time = elapsedTime;
 
 	cudaDeviceSynchronize();
 	cudaDeviceReset();
 
 	end = clock();
-	printf("\n total time: %f s\n", (float)(end - start) / 1000000);
-
+	//printf("\n total time: %f s\n", (float)(end - start) / 1000000);
+	exec_metrics.tot_time = (float)(end - start) / 1000000;
+	printf("+++ metrics +++\nfiles count: %d\nparse time: %f\ninit time: %f\nsolve time: %f\ntot time: %f", exec_metrics.files_count, exec_metrics.parse_time / 1000000, exec_metrics.init_time, exec_metrics.solve_time / 1000000, exec_metrics.tot_time);
+	//printf ("c statistics of %s: mem: %i conflicts: %i max_lemmas: %i\n", argv[1], S.mem_used, S.nConflicts, S.maxLemmas);
 	//printf("\n END \n");
 	return 0;
 }
