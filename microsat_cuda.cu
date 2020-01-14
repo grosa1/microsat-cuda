@@ -9,6 +9,10 @@
 #include <time.h>
 #include <string>
 
+#define DB_MAX_MEM 412000;
+//#define DB_MAX_MEM 100000;
+#define CLAUSE_LEARN_MAX_MEM 100000;
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
 {
@@ -269,7 +273,8 @@ void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nCl
 	S->nClauses= nClauses;
 	if (verb)printf("\n S->nClauses -> %d\n", S->nClauses);
 
-	S->mem_max = 100000;            // Set the initial maximum memory
+	//S->mem_max = 100000;            // Set the initial maximum memory
+	S->mem_max = DB_MAX_MEM;            // Set the initial maximum memory
 	if (verb)printf("\n S->mem_max -> %d\n", S->mem_max);
 	S->mem_used = 0;                  // The number of integers allocated in the DB
 	if (verb)printf("\n S->mem_used -> %d\n", S->mem_used);
@@ -277,9 +282,10 @@ void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nCl
 	if (verb)printf("\n S->nLemmas -> %d\n", S->nLemmas);
 	S->nConflicts = 0;                  // Under of conflicts which is used to updates scores
 	if (verb)printf("\n S->nConflicts -> %d\n", S->nConflicts);
-	S->maxLemmas = 2000;               // Initial maximum number of learnt clauses
+	S->maxLemmas = 50;               // Initial maximum number of learnt clauses
 	if (verb)printf("\n S->maxLemmas -> %d\n", S->maxLemmas);
-	S->fast = S->slow = 1 << 24;            // Initialize the fast and slow moving averages
+	//S->fast = S->slow = 1 << 24;            // Initialize the fast and slow moving averages
+	S->fast = S->slow = CLAUSE_LEARN_MAX_MEM;            // Initialize the fast and slow moving averages
 	if (verb)printf("\n S->fast -> %d\n", S->fast);
 	if (verb)printf("\n S->slow -> %d\n", S->slow);
 	S->result = -1;
@@ -445,7 +451,8 @@ static void read_until_new_line(FILE* input) {
 		gpuErrchk(cudaMalloc((void**)&dev_s, sizeof(solver)));
 
 		int* db;
-		int mem = 100000; //TODO: allocazione dinamica della memoria
+		//int mem = 100000; //TODO: allocazione dinamica della memoria
+		int mem = DB_MAX_MEM; //TODO: allocazione dinamica della memoria
 		gpuErrchk(cudaMalloc((void**)&db, sizeof(int) * mem));
 
 		struct stat st;
