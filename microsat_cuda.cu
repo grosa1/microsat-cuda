@@ -9,9 +9,11 @@
 #include <time.h>
 #include <string>
 
-#define DB_MAX_MEM 412000;
+ #define DB_MAX_MEM 412000;
 //#define DB_MAX_MEM 100000;
 #define CLAUSE_LEARN_MAX_MEM 100000;
+// #define INITIAL_MAX_LEMMAS 100; //initial max learnt clauses
+#define INITIAL_MAX_LEMMAS 2000; //initial max learnt clauses
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
@@ -27,7 +29,6 @@ struct solver { // The variables in the struct are described in the allocate pro
 	int* DB, nVars, nClauses, mem_used, mem_fixed, mem_max, maxLemmas, nLemmas, * buffer, nConflicts, * model,
 		* reason, * falseStack, * _false, * first, * forced, * processed, * assigned, * next, * prev, head, res, fast, slow,
 		result, file_id;
-	char*input_file;
 };
 
 typedef struct {
@@ -282,7 +283,7 @@ void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nCl
 	if (verb)printf("\n S->nLemmas -> %d\n", S->nLemmas);
 	S->nConflicts = 0;                  // Under of conflicts which is used to updates scores
 	if (verb)printf("\n S->nConflicts -> %d\n", S->nConflicts);
-	S->maxLemmas = 50;               // Initial maximum number of learnt clauses
+	S->maxLemmas = INITIAL_MAX_LEMMAS;               // Initial maximum number of learnt clauses
 	if (verb)printf("\n S->maxLemmas -> %d\n", S->maxLemmas);
 	//S->fast = S->slow = 1 << 24;            // Initialize the fast and slow moving averages
 	S->fast = S->slow = CLAUSE_LEARN_MAX_MEM;            // Initialize the fast and slow moving averages
@@ -397,10 +398,17 @@ static void read_until_new_line(FILE* input) {
 	int nClauses = 0;
 	Metrics exec_metrics = {0, 0, 0, 0, 0};
 
+	int db_max_mem =DB_MAX_MEM;
+	int clause_learn_max_mem = CLAUSE_LEARN_MAX_MEM;
+	int initial_max_mem =  INITIAL_MAX_LEMMAS;
+    printf("DB_MAX_MEM: %d\n", db_max_mem);
+    printf("CLAUSE_LEARN_MAX_MEM: %d\n", clause_learn_max_mem);
+    printf("INITIAL_MAX_LEMMAS: %d\n", initial_max_mem);
+    
 	clock_t start, end;
 	printf(" Start\n");
 	start = clock();
-
+    
 	DIR* dirp;
 	struct dirent* entry;
 	dirp = opendir(directory);
