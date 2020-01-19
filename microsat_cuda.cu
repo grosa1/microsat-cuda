@@ -578,7 +578,7 @@ exec_metrics.parse_time = (clock() - start_parse);
 	end = clock();
 	//printf("\n total time: %f s\n", (float)(end - start) / 1000000);
 	exec_metrics.tot_time = (end - start);
-	printf("\n+++ metrics (ms)+++\nfiles count: %d\nparse time: %d\ncuda init time: %d\ncuda solve time: %d\ntot time: %d\n\n", exec_metrics.files_count, exec_metrics.parse_time, exec_metrics.init_time, exec_metrics.solve_time, exec_metrics.tot_time);
+	printf("\n+++ metrics (ms)+++\nfiles count: %d\nparse time: %d\ncuda init time: %d\ncuda solve time: %d\ntot time: %d\n\n", exec_metrics.files_count, exec_metrics.parse_time/CLOCKS_PER_SEC, exec_metrics.init_time/1000, exec_metrics.solve_time/1000, exec_metrics.tot_time/CLOCKS_PER_SEC);
 	//printf ("c statistics of %s: mem: %i conflicts: %i max_lemmas: %i\n", argv[1], S.mem_used, S.nConflicts, S.maxLemmas);
 	//printf("\n END \n");
 	return 0;
