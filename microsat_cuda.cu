@@ -433,7 +433,8 @@ static void read_until_new_line(FILE* input) {
 		return 1;
 	}
 
-	clock_t start_parse;
+	clock_t start_parse = clock();
+
 	int count = 0;
 	while ((entry = readdir(dirp)))
 	{
@@ -472,7 +473,6 @@ static void read_until_new_line(FILE* input) {
 		int* buffer = 0;
 		buffer = (int*)malloc(size * sizeof(int));
 
-		start_parse = clock();
 		/********* FILE PARSER **************/
 		int tmp;
 		while ((tmp = getc(input)) == 'c') read_until_new_line(input);
@@ -577,8 +577,8 @@ exec_metrics.parse_time += (clock() - start_parse);
 
 	end = clock();
 	//printf("\n total time: %f s\n", (float)(end - start) / 1000000);
-	exec_metrics.tot_time = (float)(end - start) / 1000000;
-	printf("\n+++ metrics (ms)+++\nfiles count: %d\nparse time: %f\ninit time: %f\nsolve time: %f\ntot time: %f", exec_metrics.files_count, exec_metrics.parse_time, exec_metrics.init_time, exec_metrics.solve_time, exec_metrics.tot_time);
+	exec_metrics.tot_time = (float)(end - start);
+	printf("\n+++ metrics (ms)+++\nfiles count: %d\nparse time: %f\ninit time: %f\nsolve time: %f\ntot time: %f\n\n", exec_metrics.files_count, exec_metrics.parse_time, exec_metrics.init_time, exec_metrics.solve_time, exec_metrics.tot_time);
 	//printf ("c statistics of %s: mem: %i conflicts: %i max_lemmas: %i\n", argv[1], S.mem_used, S.nConflicts, S.maxLemmas);
 	//printf("\n END \n");
 	return 0;
