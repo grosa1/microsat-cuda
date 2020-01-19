@@ -433,6 +433,7 @@ static void read_until_new_line(FILE* input) {
 		return 1;
 	}
 
+	clock_t start_parse;
 	int count = 0;
 	while ((entry = readdir(dirp)))
 	{
@@ -471,7 +472,7 @@ static void read_until_new_line(FILE* input) {
 		int* buffer = 0;
 		buffer = (int*)malloc(size * sizeof(int));
 
-		clock_t start_parse = clock();
+		start_parse = clock();
 		/********* FILE PARSER **************/
 		int tmp;
 		while ((tmp = getc(input)) == 'c') read_until_new_line(input);
