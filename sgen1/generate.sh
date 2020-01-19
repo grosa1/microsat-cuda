@@ -1,5 +1,8 @@
 # sat formula generator
 
+mkdir gen20
+
 for i in {1..1000}; do
-    ./sgen1 -sat -n 140 -s $i > gen/sat$i.cnf
+    echo "generate $i"
+    ./sgen1 -sat -n 20 -s $i > gen20/sat20_$i.cnf
 done 
