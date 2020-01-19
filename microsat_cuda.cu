@@ -33,10 +33,10 @@ struct solver { // The variables in the struct are described in the allocate pro
 
 typedef struct {
 	int files_count;
-	int parse_time;
-	int init_time;
-	int solve_time;
-	int tot_time;
+	double parse_time;
+	double init_time;
+	double solve_time;
+	double tot_time;
 } Metrics;
 
 enum { END = -9, UNSAT = 0, SAT = 1, MARK = 2, IMPLIED = 6 };
@@ -577,8 +577,8 @@ exec_metrics.parse_time = (clock() - start_parse);
 
 	end = clock();
 	//printf("\n total time: %f s\n", (float)(end - start) / 1000000);
-	exec_metrics.tot_time = (end - start);
-	printf("\n+++ metrics (ms)+++\nfiles count: %d\nparse time: %d\ncuda init time: %d\ncuda solve time: %d\ntot time: %d\n\n", exec_metrics.files_count, exec_metrics.parse_time/CLOCKS_PER_SEC, exec_metrics.init_time/1000, exec_metrics.solve_time/1000, exec_metrics.tot_time/CLOCKS_PER_SEC);
+	exec_metrics.tot_time = (float)(end - start);
+	printf("\n+++ metrics (ms)+++\nfiles count: %d\nparse time: %f\ncuda init time: %f\ncuda solve time: %f\ntot time: %f\n\n", exec_metrics.files_count, exec_metrics.parse_time/CLOCKS_PER_SEC, exec_metrics.init_time/1000, exec_metrics.solve_time/1000, exec_metrics.tot_time/CLOCKS_PER_SEC);
 	//printf ("c statistics of %s: mem: %i conflicts: %i max_lemmas: %i\n", argv[1], S.mem_used, S.nConflicts, S.maxLemmas);
 	//printf("\n END \n");
 	return 0;
