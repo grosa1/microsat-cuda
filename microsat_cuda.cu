@@ -514,26 +514,25 @@ static void read_until_new_line(FILE* input) {
 
 		free(buffer);
 		free(elements);
-		exec_metrics.parse_time += (clock() - start_parse);
-
 
 		cudaDeviceSetLimit(cudaLimitMallocHeapSize, 128 * 1024 * 1024);
 
 		//printf("\n INIT \n");
-		cudaEvent_t d_start, d_stop;
-		cudaEventCreate(&d_start);
-		cudaEventCreate(&d_stop);
+		cudaEvent_t d_start_init, d_stop_init;
+		cudaEventCreate(&d_start_init);
+		cudaEventCreate(&d_stop_init);
 
-		cudaEventRecord(d_start, 0);
+		cudaEventRecord(d_start_init, 0);
 		init << <1, 1 >> > (dev_s,dev_elements,nElements,nVars,nClauses,db,dev_file_id);
-		cudaEventRecord(d_stop, 0);
-		cudaEventSynchronize(d_stop);
+		cudaEventRecord(d_stop_init, 0);
+		cudaEventSynchronize(d_stop_init);
 
 		float elapsedTime;
-		cudaEventElapsedTime(&elapsedTime, d_start, d_stop); // that's our time!
+		cudaEventElapsedTime(&elapsedTime, d_start_init, d_stop_init); // that's our time!
+		exec_metrics.init_time += elapsedTime;
 		// Clean up:
-		cudaEventDestroy(d_start);
-		cudaEventDestroy(d_stop);
+		cudaEventDestroy(d_start_init);
+		cudaEventDestroy(d_stop_init);
 
 		//printf("parsing_file -> %s\n", entry->d_name);
 		//printf("device_time -> %f s\n", elapsedTime / 1000000);
@@ -547,6 +546,8 @@ static void read_until_new_line(FILE* input) {
 		count++;
 	}
 /*********** end init and parse ***********/
+exec_metrics.parse_time += (clock() - start_parse);
+
 
 	cudaMemcpy(d_multi_struct, h_multi_struct, num_file * sizeof(solver*), cudaMemcpyHostToDevice);
 	//temp end
@@ -576,7 +577,7 @@ static void read_until_new_line(FILE* input) {
 	end = clock();
 	//printf("\n total time: %f s\n", (float)(end - start) / 1000000);
 	exec_metrics.tot_time = (float)(end - start) / 1000000;
-	printf("\n+++ metrics +++\nfiles count: %d\nparse time: %f\ninit time: %f\nsolve time: %f\ntot time: %f", exec_metrics.files_count, exec_metrics.parse_time / 1000000, exec_metrics.init_time, exec_metrics.solve_time / 1000000, exec_metrics.tot_time);
+	printf("\n+++ metrics (ms)+++\nfiles count: %d\nparse time: %f\ninit time: %f\nsolve time: %f\ntot time: %f", exec_metrics.files_count, exec_metrics.parse_time, exec_metrics.init_time, exec_metrics.solve_time, exec_metrics.tot_time);
 	//printf ("c statistics of %s: mem: %i conflicts: %i max_lemmas: %i\n", argv[1], S.mem_used, S.nConflicts, S.maxLemmas);
 	//printf("\n END \n");
 	return 0;
