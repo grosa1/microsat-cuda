@@ -1,3 +1,0 @@
-s SATISFIABLE
-c statistics of /home/giovanni/Desktop/git/microsat-cuda/dimacs/sat/uf20-91/uf20-039.cnf: mem: 814 conflicts: 11 max_lemmas: 2000
-cpu time: 0.000176 s
