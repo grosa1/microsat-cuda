@@ -9,7 +9,7 @@
 #include <time.h>
 #include <string>
 
- #define DB_MAX_MEM 412000;
+ #define DB_MAX_MEM 100000;
 //#define DB_MAX_MEM 100000;
 #define CLAUSE_LEARN_MAX_MEM 100000;
 // #define INITIAL_MAX_LEMMAS 100; //initial max learnt clauses
@@ -225,7 +225,7 @@ int propagate(struct solver* S) {                  // Performs unit propagation
 
 __global__
 void solve(struct solver** multi_s) {    // Determine satisfiability
-	struct solver* S = multi_s[threadIdx.x];
+	struct solver* S = multi_s[blockIdx.x];
 
 	int decision = S->head; S->res = 0;                               // Initialize the solver
 	for (;;) {                                                        // Main solve loop
@@ -252,7 +252,7 @@ void solve(struct solver** multi_s) {    // Determine satisfiability
 		}
 		//printf("decision: %d \n", decision);                               // Replace it with the next variable in the decision list
 		if (decision == 0) {
-			printf("file_%d=SAT,vars=%i,clauses=%i,mem=%i,conflicts=%i,lemmas=%i\n", S->file_id,S->nVars,S->nClauses,S->mem_used,S->nConflicts,S->maxLemmas);
+			//printf("file_%d=SAT,vars=%i,clauses=%i,mem=%i,conflicts=%i,lemmas=%i\n", S->file_id,S->nVars,S->nClauses,S->mem_used,S->nConflicts,S->maxLemmas);
 			multi_s[threadIdx.x]->result = SAT;
 			//printf("result -->", S->result );
 			return;                                  // If the end of the list is reached, then a solution is found
@@ -266,106 +266,64 @@ void solve(struct solver** multi_s) {    // Determine satisfiability
 
 __global__
 void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nClauses, int* db, int*file_id) {                            // Parse the formula and initialize
-	int verb = 0;
-	if (verb)("\n init \n");
+
 	S->file_id = *file_id;
 	S->nVars=nVars;
-	if (verb)printf("\n S->nVars -> %d\n", S->nVars);
 	S->nClauses= nClauses;
-	if (verb)printf("\n S->nClauses -> %d\n", S->nClauses);
 
 	//S->mem_max = 100000;            // Set the initial maximum memory
 	S->mem_max = DB_MAX_MEM;            // Set the initial maximum memory
-	if (verb)printf("\n S->mem_max -> %d\n", S->mem_max);
 	S->mem_used = 0;                  // The number of integers allocated in the DB
-	if (verb)printf("\n S->mem_used -> %d\n", S->mem_used);
 	S->nLemmas = 0;                  // The number of learned clauses -- redundant means learned
-	if (verb)printf("\n S->nLemmas -> %d\n", S->nLemmas);
 	S->nConflicts = 0;                  // Under of conflicts which is used to updates scores
-	if (verb)printf("\n S->nConflicts -> %d\n", S->nConflicts);
 	S->maxLemmas = INITIAL_MAX_LEMMAS;               // Initial maximum number of learnt clauses
-	if (verb)printf("\n S->maxLemmas -> %d\n", S->maxLemmas);
 	//S->fast = S->slow = 1 << 24;            // Initialize the fast and slow moving averages
 	S->fast = S->slow = CLAUSE_LEARN_MAX_MEM;            // Initialize the fast and slow moving averages
-	if (verb)printf("\n S->fast -> %d\n", S->fast);
-	if (verb)printf("\n S->slow -> %d\n", S->slow);
 	S->result = -1;
-	if (verb)printf("\n S->result -> %d\n", S->result);
 
 	S->DB = db;
-	if (verb)printf("\n S->DB -> %d \n", S->DB);
-
 	S->model = getMemory(S, S->nVars + 1); // Full assignment of the (Boolean) variables (initially set to false)
-	if (verb)printf("\n S->model -> %d \n", S->model);
 
 	S->next = getMemory(S, S->nVars + 1); // Next variable in the heuristic order
-	if (verb)printf("\n S->next -> %d \n", S->next);
 
 	S->prev = getMemory(S, S->nVars + 1); // Previous variable in the heuristic order
-	if (verb)printf("\n S->prev -> %d \n", S->prev);
 
 	S->buffer = getMemory(S, S->nVars); // A buffer to store a temporary clause
-	if (verb)printf("\n S->buffer -> %d \n", S->buffer);
 
 	S->reason = getMemory(S, S->nVars + 1); // Array of clauses
-	if (verb)printf("\n S->reason -> %d \n", S->reason);
 
 	S->falseStack = getMemory(S, S->nVars + 1); // Stack of falsified literals -- this pointer is never changed
-	if (verb)printf("\n S->falseStack -> %d \n", S->falseStack);
 
 	S->forced = S->falseStack;      // Points inside *falseStack at first decision (unforced literal)
-	if (verb)printf("\n S->forced -> %d \n", S->forced);
 	S->processed = S->falseStack;      // Points inside *falseStack at first unprocessed literal
-	if (verb)printf("\n S->processed -> %d \n", S->processed);
 	S->assigned = S->falseStack;      // Points inside *falseStack at last unprocessed literal
-	if (verb)printf("\n S->assigned -> %d \n", S->assigned);
 
 	S->_false = getMemory(S, 2 * S->nVars + 1);
 	S->_false += S->nVars; // Labels for variables, non-zero means false
-	if (verb)printf("\n S->_false -> %d \n", S->_false);
 
 	S->first = getMemory(S, 2 * S->nVars + 1);
 	S->first += S->nVars; // Offset of the first watched clause
-	if (verb)printf("\n S->first -> %d \n", S->first);
 
 	S->DB[S->mem_used++] = 0;            // Make sure there is a 0 before the clauses are loaded.
-	if (verb)printf("\n S->DB[S->mem_used] -> %d \n", S->DB[S->mem_used-1]);
 
-	if (verb)printf("\n elements \n");
 	int i; for (i = 1; i <= S->nVars; i++) {							// Initialize the main datastructes:
 		S->prev[i] = i - 1;
-		if (verb)printf("\n S->prev[i] -> %d \n", S->prev[i]);
 
 		S->next[i - 1] = i;
-		if (verb)printf("\n S->next[i-1] -> %d \n", S->next[i - 1]);
 
 		S->model[i] = S->_false[-i] = S->_false[i] = 0;
-		if (verb)printf("\n S->model[i] -> %d \n", S->model[i]);
-		if (verb)printf("\n S->_false[i] -> %d \n", S->_false[i]);
-		if (verb)printf("\n S->_false[-i] -> %d \n", S->_false[-i]);
-
 		S->first[i] = S->first[-i] = END;						// and first (watch pointers).
-		if (verb)printf("\n S->first[i] -> %d \n", S->first[i]);
-		if (verb)printf("\n S->first[i] -> %d \n", S->first[-i]);
 		S->head = S->nVars;												// Initialize the head of the double-linked list
-		if (verb)printf("\n S->head -> %d \n", S->head);
 	}
 
 
 	int nZeros = S->nClauses, size = 0;                      // Initialize the number of clauses to read
-	if (verb)printf("\n nZeros -> %d \n", nZeros);
 	for (int i = 0; i < nElements;i++) {                                     // While there are elements
 		int lit = 0;
 		lit= dev_elements[i];
-		if (verb)printf("\n lit -> %d \n", lit);
 
 		if (!lit) {                                            // If reaching the end of the clause
-			if (verb)printf("\n addClause \n");
 			int* clause = addClause(S, S->buffer, size, 1);     // Then add the clause to data_base
-			if (verb)printf("\n clause -> %d \n", clause);
-
-			if (verb)printf("\n size -> %d \n", size);
-			if (verb)printf("\n S->_false[clause[0]] -> %d \n", S->_false[clause[0]]);
 			if (!size || ((size == 1) && S->_false[clause[0]])) {  // Check for empty clause or conflicting unit
 
 				printf("\n + UNSAT + \n");
@@ -373,7 +331,6 @@ void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nCl
 				return;
 			}                                     // If either is found return UNSAT
 			if ((size == 1) && !S->_false[-clause[0]]) {          // Check for a new unit
-				if (verb)printf("\n assign \n");
 				assign(S, clause, 1);
 			}                           // Directly assign new units (forced = 1)
 			size = 0; --nZeros;
@@ -447,7 +404,7 @@ static void read_until_new_line(FILE* input) {
 		strcpy(path, directory);
 		strcat(path, "//");
 		strcat(path, entry->d_name);
-		printf("file_%d=%s\n", count, entry->d_name);
+		//printf("file_%d=%s\n", count, entry->d_name);
 
 		FILE* input = fopen(path, "r");
 		if (input == NULL)
@@ -516,7 +473,7 @@ static void read_until_new_line(FILE* input) {
 		free(buffer);
 		free(elements);
 
-		cudaDeviceSetLimit(cudaLimitMallocHeapSize, 128 * 1024 * 1024);
+		//cudaDeviceSetLimit(cudaLimitMallocHeapSize, 128 * 1024 * 1024);
 
 		//printf("\n INIT \n");
 		cudaEvent_t d_start_init, d_stop_init;
@@ -559,7 +516,8 @@ exec_metrics.parse_time = (clock() - start_parse);
 	cudaEventCreate(&d_stop);
 
 	cudaEventRecord(d_start, 0);
-	solve<< <1, num_file >> > (d_multi_struct);
+	// solve<< <1, num_file >> > (d_multi_struct);
+	solve<< <num_file, 1 >> > (d_multi_struct);
 	cudaEventRecord(d_stop, 0);
 	cudaEventSynchronize(d_stop);
 
