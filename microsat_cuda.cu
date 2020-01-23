@@ -9,22 +9,6 @@
 #include <time.h>
 #include <string>
 
- #define DB_MAX_MEM 100000;
-//#define DB_MAX_MEM 100000;
-#define CLAUSE_LEARN_MAX_MEM 100000;
-// #define INITIAL_MAX_LEMMAS 100; //initial max learnt clauses
-#define INITIAL_MAX_LEMMAS 2000; //initial max learnt clauses
-
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
-{
-	if (code != cudaSuccess)
-	{
-		fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-		if (abort) exit(code);
-	}
-}
-
 struct solver { // The variables in the struct are described in the allocate procedure
 	int* DB, nVars, nClauses, mem_used, mem_fixed, mem_max, maxLemmas, nLemmas, * buffer, nConflicts, * model,
 		* reason, * falseStack, * _false, * first, * forced, * processed, * assigned, * next, * prev, head, res, fast, slow,
@@ -40,6 +24,34 @@ typedef struct {
 } Metrics;
 
 enum { END = -9, UNSAT = 0, SAT = 1, MARK = 2, IMPLIED = 6 };
+
+void showMem(){
+    // show memory usage of GPU
+    size_t free_byte ;
+    size_t total_byte ;
+    cudaError_t cuda_status = cudaMemGetInfo( &free_byte, &total_byte ) ;
+    if ( cudaSuccess != cuda_status ){
+        printf("Error: cudaMemGetInfo fails, %s \n", cudaGetErrorString(cuda_status) );
+        exit(1);
+    }
+
+    double free_db = (double)free_byte ;
+    double total_db = (double)total_byte ;
+    double used_db = total_db - free_db ;
+    printf("GPU memory usage: used = %f, free = %f MB, total = %f MB\n",
+    used_db/1024.0/1024.0, free_db/1024.0/1024.0, total_db/1024.0/1024.0);
+}
+
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
+{
+	if (code != cudaSuccess)
+	{
+        showMem();
+		fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+		if (abort) exit(code);
+	}
+}
 
 __device__
 int* getMemory(struct solver* S, int mem_size) {                  // Allocate memory of size mem_size
@@ -232,7 +244,7 @@ void solve(struct solver** multi_s) {    // Determine satisfiability
 		int old_nLemmas = S->nLemmas;                                   // Store nLemmas to see whether propagate adds lemmas
 		int res = propagate(S);
 		if (res == UNSAT) {
-			printf("file_%d=UNSAT,vars=%i,clauses=%i,mem=%i,conflicts=%i,lemmas=%i\n", S->file_id,S->nVars,S->nClauses,S->mem_used,S->nConflicts,S->maxLemmas);
+			printf("file_%d=UNSAT,vars=%i,clauses=%i,mem=%i,conflicts=%i,lemmas=%i\n", S->file_id, S->nVars, S->nClauses, S->mem_used, S->nConflicts, S->maxLemmas);
 			multi_s[threadIdx.x]->result = UNSAT;
 			//printf("result -->", S->result);
 			return;
@@ -252,7 +264,7 @@ void solve(struct solver** multi_s) {    // Determine satisfiability
 		}
 		//printf("decision: %d \n", decision);                               // Replace it with the next variable in the decision list
 		if (decision == 0) {
-			//printf("file_%d=SAT,vars=%i,clauses=%i,mem=%i,conflicts=%i,lemmas=%i\n", S->file_id,S->nVars,S->nClauses,S->mem_used,S->nConflicts,S->maxLemmas);
+			printf("file_%d=SAT,vars=%i,clauses=%i,mem=%i,conflicts=%i,lemmas=%i\n", S->file_id,S->nVars,S->nClauses,S->mem_used,S->nConflicts,S->maxLemmas);
 			multi_s[threadIdx.x]->result = SAT;
 			//printf("result -->", S->result );
 			return;                                  // If the end of the list is reached, then a solution is found
@@ -265,11 +277,12 @@ void solve(struct solver** multi_s) {    // Determine satisfiability
 }          // Decisions have no reason clauses
 
 __global__
-void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nClauses, int* db, int*file_id) {                            // Parse the formula and initialize
+void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nClauses, int* db,
+	int* file_id, int DB_MAX_MEM, int CLAUSE_LEARN_MAX_MEM, int INITIAL_MAX_LEMMAS) {
 
 	S->file_id = *file_id;
-	S->nVars=nVars;
-	S->nClauses= nClauses;
+	S->nVars = nVars;
+	S->nClauses = nClauses;
 
 	//S->mem_max = 100000;            // Set the initial maximum memory
 	S->mem_max = DB_MAX_MEM;            // Set the initial maximum memory
@@ -318,9 +331,9 @@ void init(struct solver* S, int* dev_elements, int nElements, int nVars, int nCl
 
 
 	int nZeros = S->nClauses, size = 0;                      // Initialize the number of clauses to read
-	for (int i = 0; i < nElements;i++) {                                     // While there are elements
+	for (int i = 0; i < nElements; i++) {                                     // While there are elements
 		int lit = 0;
-		lit= dev_elements[i];
+		lit = dev_elements[i];
 
 		if (!lit) {                                            // If reaching the end of the clause
 			int* clause = addClause(S, S->buffer, size, 1);     // Then add the clause to data_base
@@ -347,25 +360,31 @@ static void read_until_new_line(FILE* input) {
 		if (ch == EOF) { printf("parse error: unexpected EOF"); exit(1); }
 }
 
- int main(int argc, char** argv) {
+int main(int argc, char** argv) {
+    if (argc < 5) {
+        printf("USAGE: ./mcuda <formulas dir> <DB_MAX_MEM> <CLAUSE_LEARN_MAX_MEM> <INITIAL_MAX_LEMMAS>\n");
+        return 0;
+    }
+    
 	//char* directory = "C://microsat//sat";
 	char* directory = argv[1];
-	int num_file =0;
+
+	int num_file = 0;
 	int nVars = 0;
 	int nClauses = 0;
-	Metrics exec_metrics = {0, 0, 0, 0, 0};
+	Metrics exec_metrics = { 0, 0, 0, 0, 0 };
 
-	int db_max_mem =DB_MAX_MEM;
-	int clause_learn_max_mem = CLAUSE_LEARN_MAX_MEM;
-	int initial_max_mem =  INITIAL_MAX_LEMMAS;
-    printf("DB_MAX_MEM: %d\n", db_max_mem);
-    printf("CLAUSE_LEARN_MAX_MEM: %d\n", clause_learn_max_mem);
-    printf("INITIAL_MAX_LEMMAS: %d\n", initial_max_mem);
-    
+	int db_max_mem = atoi(argv[2]);
+	int clause_learn_max_mem = atoi(argv[3]);
+	int initial_max_mem = atoi(argv[4]);
+	printf("DB_MAX_MEM: %d\n", db_max_mem);
+	printf("CLAUSE_LEARN_MAX_MEM: %d\n", clause_learn_max_mem);
+	printf("INITIAL_MAX_LEMMAS: %d\n", initial_max_mem);
+
 	clock_t start, end;
 	printf(" Start\n");
 	start = clock();
-    
+
 	DIR* dirp;
 	struct dirent* entry;
 	dirp = opendir(directory);
@@ -419,7 +438,7 @@ static void read_until_new_line(FILE* input) {
 
 		int* db;
 		//int mem = 100000; //TODO: allocazione dinamica della memoria
-		int mem = DB_MAX_MEM; //TODO: allocazione dinamica della memoria
+		int mem = db_max_mem; //TODO: allocazione dinamica della memoria
 		gpuErrchk(cudaMalloc((void**)&db, sizeof(int) * mem));
 
 		struct stat st;
@@ -442,8 +461,8 @@ static void read_until_new_line(FILE* input) {
 		int nElements = 0;
 		do {
 			int ch = getc(input);
-			if(ch == '\%') break; //we have % as EOF in some dimacs files
-			if ( ch == ' ' || ch == '\n') continue;
+			if (ch == '\%') break; //we have % as EOF in some dimacs files
+			if (ch == ' ' || ch == '\n') continue;
 			if (ch == 'c') { read_until_new_line(input); continue; }
 			ungetc(ch, input);
 			int lit = 0;
@@ -481,7 +500,7 @@ static void read_until_new_line(FILE* input) {
 		cudaEventCreate(&d_stop_init);
 
 		cudaEventRecord(d_start_init, 0);
-		init << <1, 1 >> > (dev_s,dev_elements,nElements,nVars,nClauses,db,dev_file_id);
+		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db, dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
 		cudaEventRecord(d_stop_init, 0);
 		cudaEventSynchronize(d_stop_init);
 
@@ -503,21 +522,24 @@ static void read_until_new_line(FILE* input) {
 		h_multi_struct[count] = dev_s;
 		count++;
 	}
-/*********** end init and parse ***********/
-exec_metrics.parse_time = (clock() - start_parse);
+	/*********** end init and parse ***********/
+	exec_metrics.parse_time = (clock() - start_parse);
 
 
 	cudaMemcpy(d_multi_struct, h_multi_struct, num_file * sizeof(solver*), cudaMemcpyHostToDevice);
 	//temp end
 
+    
 	printf("\n SOLVE \n");
+    showMem();
+    
 	cudaEvent_t d_start, d_stop;
 	cudaEventCreate(&d_start);
 	cudaEventCreate(&d_stop);
 
 	cudaEventRecord(d_start, 0);
 	// solve<< <1, num_file >> > (d_multi_struct);
-	solve<< <num_file, 1 >> > (d_multi_struct);
+	solve << <num_file, 1 >> > (d_multi_struct);
 	cudaEventRecord(d_stop, 0);
 	cudaEventSynchronize(d_stop);
 
@@ -536,7 +558,7 @@ exec_metrics.parse_time = (clock() - start_parse);
 	end = clock();
 	//printf("\n total time: %f s\n", (float)(end - start) / 1000000);
 	exec_metrics.tot_time = (float)(end - start);
-	printf("\n+++ metrics (s)+++\nfiles count: %d\nparse time: %f\ncuda init time: %f\ncuda solve time: %f\ntot time: %f\n\n", exec_metrics.files_count, exec_metrics.parse_time/CLOCKS_PER_SEC, exec_metrics.init_time/1000, exec_metrics.solve_time/1000, exec_metrics.tot_time/CLOCKS_PER_SEC);
+	printf("\n+++ metrics (s)+++\nfiles count: %d\nparse time: %f\ncuda init time: %f\ncuda solve time: %f\ntot time: %f\n\n", exec_metrics.files_count, exec_metrics.parse_time / CLOCKS_PER_SEC, exec_metrics.init_time / 1000, exec_metrics.solve_time / 1000, exec_metrics.tot_time / CLOCKS_PER_SEC);
 	//printf ("c statistics of %s: mem: %i conflicts: %i max_lemmas: %i\n", argv[1], S.mem_used, S.nConflicts, S.maxLemmas);
 	//printf("\n END \n");
 	return 0;
