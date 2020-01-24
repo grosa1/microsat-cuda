@@ -25,6 +25,24 @@ typedef struct {
 
 enum { END = -9, UNSAT = 0, SAT = 1, MARK = 2, IMPLIED = 6 };
 
+void deviceInfo(){
+  int nDevices;
+
+  cudaGetDeviceCount(&nDevices);
+  for (int i = 0; i < nDevices; i++) {
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, i);
+    printf("Device Number: %d\n", i);
+    printf("  Device name: %s\n", prop.name);
+    printf("  Memory Clock Rate (KHz): %d\n",
+           prop.memoryClockRate);
+    printf("  Memory Bus Width (bits): %d\n",
+           prop.memoryBusWidth);
+    printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
+           2.0*prop.memoryClockRate*(prop.memoryBusWidth/8)/1.0e6);
+  }
+}
+
 void showMem(){
     // show memory usage of GPU
     size_t free_byte ;
@@ -380,6 +398,8 @@ int main(int argc, char** argv) {
 	printf("DB_MAX_MEM: %d\n", db_max_mem);
 	printf("CLAUSE_LEARN_MAX_MEM: %d\n", clause_learn_max_mem);
 	printf("INITIAL_MAX_LEMMAS: %d\n", initial_max_mem);
+
+	deviceInfo();
 
 	clock_t start, end;
 	printf(" Start\n");
