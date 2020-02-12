@@ -403,7 +403,7 @@ int main(int argc, char** argv) {
 	printf("CLAUSE_LEARN_MAX_MEM: %d\n", clause_learn_max_mem);
 	printf("INITIAL_MAX_LEMMAS: %d\n", initial_max_mem);
 
-	deviceInfo();
+	//deviceInfo();
 
 	clock_t start, end;
 	printf(" Start\n");
