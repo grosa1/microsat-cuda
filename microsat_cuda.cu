@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <time.h>
 #include <string>
+#include <pthread.h>
+#include "thpool.h"
 
 struct solver { // The variables in the struct are described in the allocate procedure
 	int* DB, nVars, nClauses, mem_used, mem_fixed, mem_max, maxLemmas, nLemmas, * buffer, nConflicts, * model,
@@ -65,7 +67,7 @@ inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort =
 {
 	if (code != cudaSuccess)
 	{
-        showMem();
+        //showMem();
 		fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
 		if (abort) exit(code);
 	}
@@ -383,7 +385,9 @@ int main(int argc, char** argv) {
         printf("USAGE: ./mcuda <formulas dir> <DB_MAX_MEM> <CLAUSE_LEARN_MAX_MEM> <INITIAL_MAX_LEMMAS>\n");
         return 0;
     }
-    
+	
+	showMem();
+
 	//char* directory = "C://microsat//sat";
 	char* directory = argv[1];
 
@@ -399,7 +403,7 @@ int main(int argc, char** argv) {
 	printf("CLAUSE_LEARN_MAX_MEM: %d\n", clause_learn_max_mem);
 	printf("INITIAL_MAX_LEMMAS: %d\n", initial_max_mem);
 
-	deviceInfo();
+	//deviceInfo();
 
 	clock_t start, end;
 	printf(" Start\n");
@@ -431,6 +435,13 @@ int main(int argc, char** argv) {
 
 	clock_t start_parse = clock();
 
+	
+	int* db;
+	//int mem = 100000; //TODO: allocazione dinamica della memoria
+	int mem = sizeof(int) * db_max_mem; //TODO: allocazione dinamica della memoria
+	gpuErrchk(cudaMalloc((void**)&db, mem * 2));
+	int* db2 = db + mem;
+
 	int count = 0;
 	while ((entry = readdir(dirp)))
 	{
@@ -456,10 +467,10 @@ int main(int argc, char** argv) {
 		struct solver* dev_s;
 		gpuErrchk(cudaMalloc((void**)&dev_s, sizeof(solver)));
 
-		int* db;
-		//int mem = 100000; //TODO: allocazione dinamica della memoria
-		int mem = db_max_mem; //TODO: allocazione dinamica della memoria
-		gpuErrchk(cudaMalloc((void**)&db, sizeof(int) * mem));
+		// int* db;
+		// //int mem = 100000; //TODO: allocazione dinamica della memoria
+		// int mem = db_max_mem; //TODO: allocazione dinamica della memoria
+		// gpuErrchk(cudaMalloc((void**)&db, sizeof(int) * mem));
 
 		struct stat st;
 		stat(path, &st);
@@ -520,7 +531,10 @@ int main(int argc, char** argv) {
 		cudaEventCreate(&d_stop_init);
 
 		cudaEventRecord(d_start_init, 0);
-		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db, dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
+		if(count == 0) {
+			init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db, dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
+		}
+		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db2, dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
 		cudaEventRecord(d_stop_init, 0);
 		cudaEventSynchronize(d_stop_init);
 
@@ -548,7 +562,6 @@ int main(int argc, char** argv) {
 
 	cudaMemcpy(d_multi_struct, h_multi_struct, num_file * sizeof(solver*), cudaMemcpyHostToDevice);
 	//temp end
-
     
 	printf("\n SOLVE \n");
     showMem();

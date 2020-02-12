@@ -1,0 +1,8 @@
+dimacs/jobs
+dimacs/sat/*/2000
+dimacs/sat/*/4000
+dimacs/sat/*/8000
+dimacs/sat/*/16000
+dimacs/sat/*/32000
+dimacs/sat/*/64000
+dimacs/sat/*/128000
