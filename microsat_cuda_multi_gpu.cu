@@ -419,7 +419,7 @@ int main(int argc, char** argv) {
 	}
 	closedir(dirp);
 	exec_metrics.files_count = num_file;
-	int per_gpu_files = ceil(num_files/gpu_count);
+	int per_gpu_files = ceil(num_file / gpu_count);
 	// printf(" num file -> %d\n",num_file);
 
 	int mem = sizeof(int) * db_max_mem; //TODO: allocazione dinamica della memoria
@@ -429,7 +429,7 @@ int main(int argc, char** argv) {
 	for (int i = 0; i < gpu_count; i++) {
 		cudaSetDevice(i);
 		h_multi_struct[i] = (solver**)malloc(num_file * sizeof(solver*));
-		db[i] = (*int)malloc(sizeof(int));
+		db[i] = (int*)malloc(sizeof(int));
 		gpuErrchk(cudaMalloc((void**)&db[i], mem * num_file));
 	}
 
@@ -593,7 +593,8 @@ int main(int argc, char** argv) {
 	// cudaEventDestroy(d_stop);
 
 	//printf("\n total solve time -> %f s\n", elapsedTime / 1000000);
-	exec_metrics.solve_time = elapsedTime;
+	// exec_metrics.solve_time = elapsedTime;
+	exec_metrics.solve_time = 0;
 	cudaDeviceSynchronize();
 
 	cudaDeviceReset();
