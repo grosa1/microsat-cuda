@@ -556,7 +556,7 @@ int main(int argc, char** argv) {
 		//printf("device_time -> %f s\n", elapsedTime / 1000000);
 		//exec_metrics.init_time += elapsedTime / 1000000;
 
-		cudaDeviceSynchronize();
+		gpuErrchk(cudaDeviceSynchronize());
 
 		//temp
 		//printf("\n dev_s -> %p\n",dev_s);
