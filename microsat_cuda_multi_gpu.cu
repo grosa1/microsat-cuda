@@ -560,7 +560,7 @@ int main(int argc, char** argv) {
 
 		//temp
 		//printf("\n dev_s -> %p\n",dev_s);
-		h_multi_struct[current_gpu_id][processed_files_count] = dev_s;
+		h_multi_struct[current_gpu_id][processed_per_gpu] = dev_s;
 		processed_files_count++;
 		processed_per_gpu++;
 	}
