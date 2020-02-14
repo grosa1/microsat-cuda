@@ -526,11 +526,11 @@ int main(int argc, char** argv) {
 
 		int* dev_file_id;
 		gpuErrchk(cudaMalloc((void**)&dev_file_id, sizeof(int)));
-		cudaMemcpy(dev_file_id, &processed_files_count, sizeof(int), cudaMemcpyHostToDevice));
+		cudaMemcpy(dev_file_id, &processed_files_count, sizeof(int), cudaMemcpyHostToDevice);
 
 		int* dev_elements;
 		gpuErrchk(cudaMalloc((void**)&dev_elements, nElements * sizeof(int)));
-		cudaMemcpy((dev_elements, elements, nElements * sizeof(int), cudaMemcpyHostToDevice));
+		cudaMemcpy(dev_elements, elements, nElements * sizeof(int), cudaMemcpyHostToDevice);
 
 		free(buffer);
 		free(elements);
@@ -574,10 +574,10 @@ int main(int argc, char** argv) {
 
 	printf("\n SOLVE \n");
 	for (int i = 0; i < gpu_count; i++) {
-		current_multi_struct = h_multi_struct[i];
+		solver** multi_struct = h_multi_struct[i];
 		solver** d_multi_struct;
 		gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
-		gpuErrchk(cudaMemcpy(d_multi_struct, , per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice);    
+		gpuErrchk(cudaMemcpy(d_multi_struct, multi_struct, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
 		//showMem();
 		solve << <per_gpu_files, 1 >> > (d_multi_struct);
 	}
