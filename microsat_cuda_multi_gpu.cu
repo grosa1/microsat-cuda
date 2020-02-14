@@ -448,8 +448,12 @@ int main(int argc, char** argv) {
 	int processed_per_gpu = 0;
 	while ((entry = readdir(dirp)))
 	{
-		if (processed_per_gpu == per_gpu_files) {
+		if ((processed_per_gpu + 1) == per_gpu_files) {
+			printf("processed %d\n", processed_per_gpu);
+			printf("max %d\n", per_gpu_files);
+			printf("gpu before %d\n", current_gpu_id);
 			cudaSetDevice(++current_gpu_id);
+			printf("gpu after %d\n", current_gpu_id);
 			processed_per_gpu = 0;
 		}
 
@@ -521,12 +525,12 @@ int main(int argc, char** argv) {
 		/********* FILE PARSER **************/
 
 		int* dev_file_id;
-		cudaMalloc((void**)&dev_file_id, sizeof(int));
-		cudaMemcpy(dev_file_id, &processed_files_count, sizeof(int), cudaMemcpyHostToDevice);
+		gpuErrchk(cudaMalloc((void**)&dev_file_id, sizeof(int)));
+		cudaMemcpy(dev_file_id, &processed_files_count, sizeof(int), cudaMemcpyHostToDevice));
 
 		int* dev_elements;
-		cudaMalloc((void**)&dev_elements, nElements * sizeof(int));
-		cudaMemcpy(dev_elements, elements, nElements * sizeof(int), cudaMemcpyHostToDevice);
+		gpuErrchk(cudaMalloc((void**)&dev_elements, nElements * sizeof(int)));
+		cudaMemcpy((dev_elements, elements, nElements * sizeof(int), cudaMemcpyHostToDevice));
 
 		free(buffer);
 		free(elements);
@@ -560,7 +564,8 @@ int main(int argc, char** argv) {
 
 		//temp
 		//printf("\n dev_s -> %p\n",dev_s);
-		h_multi_struct[current_gpu_id][processed_per_gpu] = dev_s;
+		solver **current_multi_struct = h_multi_struct[current_gpu_id];
+		current_multi_struct[processed_per_gpu] = dev_s;
 		processed_files_count++;
 		processed_per_gpu++;
 	}
@@ -569,9 +574,10 @@ int main(int argc, char** argv) {
 
 	printf("\n SOLVE \n");
 	for (int i = 0; i < gpu_count; i++) {
+		current_multi_struct = h_multi_struct[i];
 		solver** d_multi_struct;
 		gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
-		cudaMemcpy(d_multi_struct, h_multi_struct[i], per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice);    
+		gpuErrchk(cudaMemcpy(d_multi_struct, , per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice);    
 		//showMem();
 		solve << <per_gpu_files, 1 >> > (d_multi_struct);
 	}
