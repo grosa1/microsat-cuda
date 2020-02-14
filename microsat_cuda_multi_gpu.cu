@@ -579,7 +579,7 @@ int main(int argc, char** argv) {
 		solver** multi_struct = h_multi_struct[i];
 		solver** d_multi_struct;
 		gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
-		gpuErrchk(cudaMemcpy(d_multi_struct, multi_struct, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
+		gpuErrchk(cudaMemcpy(d_multi_struct, &multi_struct, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
 		//showMem();
 		solve << <per_gpu_files, 1 >> > (d_multi_struct);
 	}
