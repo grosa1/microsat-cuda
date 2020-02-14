@@ -532,8 +532,8 @@ int main(int argc, char** argv) {
 
 		cudaEventRecord(d_start_init, 0);
 		// init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, &(db[count * mem]), dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
-		int* db_offset = db + (db_max_mem * count);
-		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
+		int* db_offset = db + (mem * count);
+		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, mem, clause_learn_max_mem, initial_max_mem);
 		cudaEventRecord(d_stop_init, 0);
 		cudaEventSynchronize(d_stop_init);
 
