@@ -385,7 +385,8 @@ int main(int argc, char** argv) {
         printf("USAGE: ./mcuda <formulas dir> <DB_MAX_MEM> <CLAUSE_LEARN_MAX_MEM> <INITIAL_MAX_LEMMAS> <GPU_COUNT>\n");
         return 0;
 	}
-	    
+	showMem();
+
 	//char* directory = "C://microsat//sat";
 	char* directory = argv[1];
 
@@ -403,8 +404,6 @@ int main(int argc, char** argv) {
 	printf("INITIAL_MAX_LEMMAS: %d\n", initial_max_mem);
 	printf("GPU_COUNT: %d\n", gpu_count);
 
-	deviceInfo();
-
 	clock_t start, end;
 	printf(" Start\n");
 	start = clock();
@@ -421,6 +420,9 @@ int main(int argc, char** argv) {
 	exec_metrics.files_count = num_file;
 	int per_gpu_files = ceil(num_file / gpu_count);
 	// printf(" num file -> %d\n",num_file);
+
+	printf("PER_GPU_FILES_COUNT: %d\n", per_gpu_files);
+	deviceInfo();
 
 	int mem = sizeof(int) * db_max_mem; //TODO: allocazione dinamica della memoria
 
@@ -448,7 +450,7 @@ int main(int argc, char** argv) {
 	int processed_per_gpu = 0;
 	while ((entry = readdir(dirp)))
 	{
-		if ((processed_per_gpu + 1) == per_gpu_files) {
+		if (processed_per_gpu == per_gpu_files) {
 			printf("processed %d\n", processed_per_gpu);
 			printf("max %d\n", per_gpu_files);
 			printf("gpu before %d\n", current_gpu_id);
@@ -526,11 +528,11 @@ int main(int argc, char** argv) {
 
 		int* dev_file_id;
 		gpuErrchk(cudaMalloc((void**)&dev_file_id, sizeof(int)));
-		cudaMemcpy(dev_file_id, &processed_files_count, sizeof(int), cudaMemcpyHostToDevice);
+		gpuErrchk(cudaMemcpy(dev_file_id, &processed_files_count, sizeof(int), cudaMemcpyHostToDevice));
 
 		int* dev_elements;
 		gpuErrchk(cudaMalloc((void**)&dev_elements, nElements * sizeof(int)));
-		cudaMemcpy(dev_elements, elements, nElements * sizeof(int), cudaMemcpyHostToDevice);
+		gpuErrchk(cudaMemcpy(dev_elements, elements, nElements * sizeof(int), cudaMemcpyHostToDevice));
 
 		free(buffer);
 		free(elements);
@@ -545,7 +547,7 @@ int main(int argc, char** argv) {
 		cudaEventRecord(d_start_init, 0);
 		// init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, &(db[count * mem]), dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
 		int* db_offset = db[current_gpu_id] + (db_max_mem * processed_files_count);
-		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
+		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, mem, clause_learn_max_mem, initial_max_mem);
 		cudaEventRecord(d_stop_init, 0);
 		cudaEventSynchronize(d_stop_init);
 
