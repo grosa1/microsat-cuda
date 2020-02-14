@@ -8,8 +8,6 @@
 #include <stdio.h>
 #include <time.h>
 #include <string>
-#include <pthread.h>
-#include "thpool.h"
 
 struct solver { // The variables in the struct are described in the allocate procedure
 	int* DB, nVars, nClauses, mem_used, mem_fixed, mem_max, maxLemmas, nLemmas, * buffer, nConflicts, * model,
