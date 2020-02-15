@@ -385,7 +385,6 @@ int main(int argc, char** argv) {
         printf("USAGE: ./mcuda <formulas dir> <DB_MAX_MEM> <CLAUSE_LEARN_MAX_MEM> <INITIAL_MAX_LEMMAS> <GPU_COUNT>\n");
         return 0;
 	}
-	showMem();
 
 	//char* directory = "C://microsat//sat";
 	char* directory = argv[1];
@@ -404,9 +403,12 @@ int main(int argc, char** argv) {
 	printf("INITIAL_MAX_LEMMAS: %d\n", initial_max_mem);
 	printf("GPU_COUNT: %d\n", gpu_count);
 
+	deviceInfo();
+
 	for (int i = 0; i < gpu_count; i++) {
 		cudaSetDevice(i);
-showMem();
+		printf("gpu %d=", i);
+		showMem();
 	}
 
 	clock_t start, end;
@@ -425,10 +427,7 @@ showMem();
 	exec_metrics.files_count = num_file;
 	int per_gpu_files = ceil(num_file / gpu_count);
 	// printf(" num file -> %d\n",num_file);
-
 	printf("PER_GPU_FILES_COUNT: %d\n", per_gpu_files);
-	deviceInfo();
-
 	int mem = sizeof(int) * db_max_mem; //TODO: allocazione dinamica della memoria
 
 	solver **h_multi_struct[gpu_count];
@@ -587,66 +586,35 @@ init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, 
 	exec_metrics.parse_time = (clock() - start_parse);
 
 	printf("\n SOLVE \n");
+	exec_metrics.solve_time = 0;
 	for (int i = 0; i < gpu_count; i++) {
 		cudaSetDevice(i);
+
+		cudaEvent_t d_start, d_stop;
+		cudaEventCreate(&d_start);
+		cudaEventCreate(&d_stop);
+
 		solver** d_multi_struct;
 		gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
 		gpuErrchk(cudaMemcpy(d_multi_struct, h_multi_struct[i], per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
+		cudaEventRecord(d_start, 0);
 		solve << <per_gpu_files, 1 >> > (d_multi_struct);
 
 		gpuErrchk(cudaDeviceSynchronize());
+
+		cudaEventRecord(d_stop, 0);
+		float elapsedTime;
+		cudaEventElapsedTime(&elapsedTime, d_start, d_stop); // that's our time!
+		// Clean up:
+		cudaEventDestroy(d_start);
+		cudaEventDestroy(d_stop);
+		exec_metrics.solve_time += elapsedTime;
+
+		printf("gpu %d=", i);
 		showMem();
 		cudaDeviceReset();
 	}
-
-		// printf("run 1");
-		// cudaSetDevice(0);
-		// solver** d_multi_struct;
-		// gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
-		// gpuErrchk(cudaMemcpy(d_multi_struct, &h_multi_struct_1, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
-		// //showMem();
-		// solve << <per_gpu_files, 1 >> > (d_multi_struct);
-
-		// cudaSetDevice(0); 
-		// gpuErrchk(cudaDeviceSynchronize());
-		// showMem();
-		// cudaDeviceReset();
-
-
-		// printf("run 2");
-		// cudaSetDevice(1);
-		// solver** d_multi_struct2;
-		// gpuErrchk(cudaMalloc((void**)&d_multi_struct2, per_gpu_files * sizeof(solver*)));
-		// gpuErrchk(cudaMemcpy(d_multi_struct2, &h_multi_struct_2, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
-		// //showMem();
-		// solve << <per_gpu_files, 1 >> > (d_multi_struct2);
-
-		// cudaSetDevice(1); cudaDeviceSynchronize();
-		// showMem();
-		// cudaDeviceReset();
-		// cudaDeviceReset();
     
-	// cudaEvent_t d_start, d_stop;
-	// cudaEventCreate(&d_start);
-	// cudaEventCreate(&d_stop);
-
-	// cudaEventRecord(d_start, 0);
-	// solve<< <1, num_file >> > (d_multi_struct);
-	// solve << <num_file, 1 >> > (d_multi_struct);
-	// cudaEventRecord(d_stop, 0);
-	// cudaEventSynchronize(d_stop);
-
-	// float elapsedTime;
-	// cudaEventElapsedTime(&elapsedTime, d_start, d_stop); // that's our time!
-	// // Clean up:
-	// cudaEventDestroy(d_start);
-	// cudaEventDestroy(d_stop);
-
-	//printf("\n total solve time -> %f s\n", elapsedTime / 1000000);
-	// exec_metrics.solve_time = elapsedTime;
-	exec_metrics.solve_time = 0;
-	//cudaDeviceSynchronize();
-
 	end = clock();
 	//printf("\n total time: %f s\n", (float)(end - start) / 1000000);
 	exec_metrics.tot_time = (float)(end - start);
