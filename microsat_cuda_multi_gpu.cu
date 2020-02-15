@@ -426,12 +426,13 @@ int main(int argc, char** argv) {
 
 	int mem = sizeof(int) * db_max_mem; //TODO: allocazione dinamica della memoria
 
-	solver **h_multi_struct[gpu_count];
+	// solver **h_multi_struct[gpu_count];
+	solver **h_multi_struct_1 = (solver**)malloc(per_gpu_files * sizeof(solver*));
+	solver **h_multi_struct_2 = (solver**)malloc(per_gpu_files * sizeof(solver*));
 	int *db[gpu_count];
 	for (int i = 0; i < gpu_count; i++) {
 		cudaSetDevice(i);
-		h_multi_struct[i] = (solver**)malloc(per_gpu_files * sizeof(solver*));
-		//db[i] = (int*)malloc(sizeof(int));
+		// h_multi_struct[i] = (solver**)malloc(per_gpu_files * sizeof(solver*));
 		gpuErrchk(cudaMalloc((void**)&db[i], mem * per_gpu_files));
 	}
 
@@ -566,8 +567,13 @@ int main(int argc, char** argv) {
 
 		//temp
 		//printf("\n dev_s -> %p\n",dev_s);
-		solver **current_multi_struct = h_multi_struct[current_gpu_id];
-		current_multi_struct[processed_per_gpu] = dev_s;
+		// solver **current_multi_struct = h_multi_struct[current_gpu_id];
+		// current_multi_struct[processed_per_gpu] = dev_s;
+		if(current_gpu_id == 0) {
+			h_multi_struct_1[processed_per_gpu] = dev_s;
+		} else {
+			h_multi_struct_2[processed_per_gpu] = dev_s;
+		}
 		total_processed_files_count++;
 		processed_per_gpu++;
 	}
@@ -575,11 +581,23 @@ int main(int argc, char** argv) {
 	exec_metrics.parse_time = (clock() - start_parse);
 
 	printf("\n SOLVE \n");
-	for (int i = 0; i < gpu_count; i++) {
-		solver** multi_struct = h_multi_struct[i];
+	// for (int i = 0; i < gpu_count; i++) {
+	// 	solver** multi_struct = h_multi_struct[i];
+	// 	solver** d_multi_struct;
+	// 	gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
+	// 	gpuErrchk(cudaMemcpy(d_multi_struct, &multi_struct, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
+	// 	//showMem();
+	// 	solve << <per_gpu_files, 1 >> > (d_multi_struct);
+	// }
+printf("run 1");
 		solver** d_multi_struct;
 		gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
-		gpuErrchk(cudaMemcpy(d_multi_struct, &multi_struct, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
+		gpuErrchk(cudaMemcpy(d_multi_struct, &h_multi_struct_1, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
+		//showMem();
+		solve << <per_gpu_files, 1 >> > (d_multi_struct);
+
+		printf("run 2");
+		gpuErrchk(cudaMemcpy(d_multi_struct, &h_multi_struct_2, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
 		//showMem();
 		solve << <per_gpu_files, 1 >> > (d_multi_struct);
 	}
