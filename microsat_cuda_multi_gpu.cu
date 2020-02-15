@@ -618,16 +618,16 @@ init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, 
 		cudaDeviceSynchronize();
 		cudaDeviceReset();
 
-		printf("run 2");
-		cudaSetDevice(1);
-		solver** d_multi_struct2;
-		gpuErrchk(cudaMalloc((void**)&d_multi_struct2, per_gpu_files * sizeof(solver*)));
-		gpuErrchk(cudaMemcpy(d_multi_struct2, &h_multi_struct_2, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
-		//showMem();
-		solve << <per_gpu_files, 1 >> > (d_multi_struct2);
+		// printf("run 2");
+		// cudaSetDevice(1);
+		// solver** d_multi_struct2;
+		// gpuErrchk(cudaMalloc((void**)&d_multi_struct2, per_gpu_files * sizeof(solver*)));
+		// gpuErrchk(cudaMemcpy(d_multi_struct2, &h_multi_struct_2, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
+		// //showMem();
+		// solve << <per_gpu_files, 1 >> > (d_multi_struct2);
 
-		cudaDeviceSynchronize();
-		cudaDeviceReset();
+		// cudaDeviceSynchronize();
+		// cudaDeviceReset();
     
 	// cudaEvent_t d_start, d_stop;
 	// cudaEventCreate(&d_start);
