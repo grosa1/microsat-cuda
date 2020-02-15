@@ -430,9 +430,9 @@ int main(int argc, char** argv) {
 	int *db[gpu_count];
 	for (int i = 0; i < gpu_count; i++) {
 		cudaSetDevice(i);
-		h_multi_struct[i] = (solver**)malloc(num_file * sizeof(solver*));
+		h_multi_struct[i] = (solver**)malloc(per_gpu_files * sizeof(solver*));
 		db[i] = (int*)malloc(sizeof(int));
-		gpuErrchk(cudaMalloc((void**)&db[i], mem * num_file));
+		gpuErrchk(cudaMalloc((void**)&db[i], mem * per_gpu_files));
 	}
 
 	if (NULL == (dirp = opendir(directory)))
