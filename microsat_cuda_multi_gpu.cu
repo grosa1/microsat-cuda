@@ -429,12 +429,20 @@ int main(int argc, char** argv) {
 	// solver **h_multi_struct[gpu_count];
 	solver **h_multi_struct_1 = (solver**)malloc(per_gpu_files * sizeof(solver*));
 	solver **h_multi_struct_2 = (solver**)malloc(per_gpu_files * sizeof(solver*));
-	int *db[gpu_count];
-	for (int i = 0; i < gpu_count; i++) {
-		cudaSetDevice(i);
-		// h_multi_struct[i] = (solver**)malloc(per_gpu_files * sizeof(solver*));
-		gpuErrchk(cudaMalloc((void**)&db[i], mem * per_gpu_files));
-	}
+	//int *db[gpu_count];
+	// for (int i = 0; i < gpu_count; i++) {
+	// 	cudaSetDevice(i);
+	// 	// h_multi_struct[i] = (solver**)malloc(per_gpu_files * sizeof(solver*));
+	// 	gpuErrchk(cudaMalloc((void**)&db[i], mem * per_gpu_files));
+	// }
+
+	cudaSetDevice(0);
+	int* db_1;
+	gpuErrchk(cudaMalloc((void**)&db_1, mem * per_gpu_files));
+
+	cudaSetDevice(1);
+	int* db_2;
+	gpuErrchk(cudaMalloc((void**)&db_2, mem * per_gpu_files));
 
 	if (NULL == (dirp = opendir(directory)))
 	{
@@ -547,8 +555,18 @@ int main(int argc, char** argv) {
 
 		cudaEventRecord(d_start_init, 0);
 		// init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, &(db[count * mem]), dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
-		int* db_offset = db[current_gpu_id] + (db_max_mem * processed_per_gpu);
-		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, mem, clause_learn_max_mem, initial_max_mem);
+		//int* db_offset = db[current_gpu_id] + (db_max_mem * processed_per_gpu);
+		int* db_offset;
+if(current_gpu_id == 0) {
+			db_offset = db_1+ (db_max_mem * processed_per_gpu);
+
+} else {
+			db_offset = db_2 + (db_max_mem * processed_per_gpu);
+
+}
+init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, mem, clause_learn_max_mem, initial_max_mem);
+
+		
 		cudaEventRecord(d_stop_init, 0);
 		cudaEventSynchronize(d_stop_init);
 
@@ -632,7 +650,7 @@ int main(int argc, char** argv) {
 	//printf("\n total time: %f s\n", (float)(end - start) / 1000000);
 	exec_metrics.tot_time = (float)(end - start);
 	printf("\n+++ metrics +++\n");
-    showMem();
+    //showMem();
     printf("files count: %d\nparse time (s): %f\ncuda init time (s): %f\ncuda solve time (s): %f\ntot time (s): %f\n\n", exec_metrics.files_count, exec_metrics.parse_time / CLOCKS_PER_SEC, exec_metrics.init_time / 1000, exec_metrics.solve_time / 1000, exec_metrics.tot_time / CLOCKS_PER_SEC);
 	//printf ("c statistics of %s: mem: %i conflicts: %i max_lemmas: %i\n", argv[1], S.mem_used, S.nConflicts, S.maxLemmas);
 	//printf("\n END \n");
