@@ -385,6 +385,7 @@ int main(int argc, char** argv) {
         printf("USAGE: ./mcuda <formulas dir> <DB_MAX_MEM> <CLAUSE_LEARN_MAX_MEM> <INITIAL_MAX_LEMMAS> <GPU_COUNT>\n");
         return 0;
 	}
+	showMem();
 
 	//char* directory = "C://microsat//sat";
 	char* directory = argv[1];
@@ -402,12 +403,6 @@ int main(int argc, char** argv) {
 	printf("CLAUSE_LEARN_MAX_MEM: %d\n", clause_learn_max_mem);
 	printf("INITIAL_MAX_LEMMAS: %d\n", initial_max_mem);
 	printf("GPU_COUNT: %d\n", gpu_count);
-
-	for (int i = 0; i < gpu_count; i++) {
-		cudaSetDevice(i);
-		printf("GPU %d:", i);
-		showMem();
-	}
 
 	clock_t start, end;
 	printf(" Start\n");
@@ -431,13 +426,23 @@ int main(int argc, char** argv) {
 
 	int mem = sizeof(int) * db_max_mem; //TODO: allocazione dinamica della memoria
 
-	solver **h_multi_struct[gpu_count];
-	int *db[gpu_count];
-	for (int i = 0; i < gpu_count; i++) {
-		cudaSetDevice(i);
-		h_multi_struct[i] = (solver**)malloc(per_gpu_files * sizeof(solver*));
-		gpuErrchk(cudaMalloc((void**)&db[i], mem * per_gpu_files));
-	}
+	// solver **h_multi_struct[gpu_count];
+	solver **h_multi_struct_1 = (solver**)malloc(per_gpu_files * sizeof(solver*));
+	solver **h_multi_struct_2 = (solver**)malloc(per_gpu_files * sizeof(solver*));
+	//int *db[gpu_count];
+	// for (int i = 0; i < gpu_count; i++) {
+	// 	cudaSetDevice(i);
+	// 	// h_multi_struct[i] = (solver**)malloc(per_gpu_files * sizeof(solver*));
+	// 	gpuErrchk(cudaMalloc((void**)&db[i], mem * per_gpu_files));
+	// }
+
+	cudaSetDevice(0);
+	int* db_1;
+	gpuErrchk(cudaMalloc((void**)&db_1, mem * per_gpu_files));
+
+	cudaSetDevice(1);
+	int* db_2;
+	gpuErrchk(cudaMalloc((void**)&db_2, mem * per_gpu_files));
 
 	if (NULL == (dirp = opendir(directory)))
 	{
@@ -455,7 +460,11 @@ int main(int argc, char** argv) {
 	while ((entry = readdir(dirp)))
 	{
 		if (processed_per_gpu == per_gpu_files) {
+			printf("processed %d\n", processed_per_gpu);
+			printf("max %d\n", per_gpu_files);
+			printf("gpu before %d\n", current_gpu_id);
 			cudaSetDevice(++current_gpu_id);
+			printf("gpu after %d\n", current_gpu_id);
 			processed_per_gpu = 0;
 		}
 
@@ -545,8 +554,17 @@ int main(int argc, char** argv) {
 		cudaEventCreate(&d_stop_init);
 
 		cudaEventRecord(d_start_init, 0);
-		int* db_offset = db[current_gpu_id] + (db_max_mem * processed_per_gpu);
-		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, mem, clause_learn_max_mem, initial_max_mem);
+		// init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, &(db[count * mem]), dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
+		//int* db_offset = db[current_gpu_id] + (db_max_mem * processed_per_gpu);
+		int* db_offset;
+if(current_gpu_id == 0) {
+			db_offset = db_1+ (db_max_mem * processed_per_gpu);
+
+} else {
+			db_offset = db_2 + (db_max_mem * processed_per_gpu);
+
+}
+init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, mem, clause_learn_max_mem, initial_max_mem);
 
 		
 		cudaEventRecord(d_stop_init, 0);
@@ -567,9 +585,13 @@ int main(int argc, char** argv) {
 
 		//temp
 		//printf("\n dev_s -> %p\n",dev_s);
-		solver **current_multi_struct = h_multi_struct[current_gpu_id];
-		current_multi_struct[processed_per_gpu] = dev_s;
-
+		// solver **current_multi_struct = h_multi_struct[current_gpu_id];
+		// current_multi_struct[processed_per_gpu] = dev_s;
+		if(current_gpu_id == 0) {
+			h_multi_struct_1[processed_per_gpu] = dev_s;
+		} else {
+			h_multi_struct_2[processed_per_gpu] = dev_s;
+		}
 		total_processed_files_count++;
 		processed_per_gpu++;
 	}
@@ -585,17 +607,32 @@ int main(int argc, char** argv) {
 		solve << <per_gpu_files, 1 >> > (d_multi_struct);
 	}
 
-	for (int i = 0; i < gpu_count; i++) {
-		cudaSetDevice(i);
-		gpuErrchk(cudaDeviceSynchronize());
-	}
+		printf("run 1");
+		cudaSetDevice(0);
+		solver** d_multi_struct;
+		gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
+		gpuErrchk(cudaMemcpy(d_multi_struct, &h_multi_struct_1, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
+		//showMem();
+		solve << <per_gpu_files, 1 >> > (d_multi_struct);
 
-	for (int i = 0; i < gpu_count; i++) {
-		cudaSetDevice(i);
-		printf("GPU %d:", i);
+		cudaSetDevice(0); cudaDeviceSynchronize();
 		showMem();
 		cudaDeviceReset();
-	}
+
+
+		printf("run 2");
+		cudaSetDevice(1);
+		solver** d_multi_struct2;
+		gpuErrchk(cudaMalloc((void**)&d_multi_struct2, per_gpu_files * sizeof(solver*)));
+		gpuErrchk(cudaMemcpy(d_multi_struct2, &h_multi_struct_2, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
+		//showMem();
+		solve << <per_gpu_files, 1 >> > (d_multi_struct2);
+
+		cudaSetDevice(1); cudaDeviceSynchronize();
+		showMem();
+		cudaDeviceReset();
+		// cudaDeviceReset();
+    
 	// cudaEvent_t d_start, d_stop;
 	// cudaEventCreate(&d_start);
 	// cudaEventCreate(&d_stop);
@@ -615,6 +652,7 @@ int main(int argc, char** argv) {
 	//printf("\n total solve time -> %f s\n", elapsedTime / 1000000);
 	// exec_metrics.solve_time = elapsedTime;
 	exec_metrics.solve_time = 0;
+	//cudaDeviceSynchronize();
 
 	end = clock();
 	//printf("\n total time: %f s\n", (float)(end - start) / 1000000);
