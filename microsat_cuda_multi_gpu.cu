@@ -587,7 +587,7 @@ int main(int argc, char** argv) {
 
 	for (int i = 0; i < gpu_count; i++) {
 		cudaSetDevice(i);
-		cudaDeviceSynchronize();
+		gpuErrchk(cudaDeviceSynchronize());
 	}
 
 	for (int i = 0; i < gpu_count; i++) {
