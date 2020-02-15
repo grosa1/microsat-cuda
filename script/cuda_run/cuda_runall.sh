@@ -16,7 +16,7 @@ for f in $dir/*; do
     
     echo +++ START $formula_size $n_formulas > $out_file
     start=$(date +%s%3N)
-    timeout 60m sh -c "./$mcuda_bin $f $mem $learn_mem $learn_clauses" >> $out_file
+    timeout 60m sh -c "./$mcuda_bin $f $mem $learn_mem $learn_clauses" &>> $out_file
     echo TOT_TIME_MILLS=$(( $(date +%s%3N) - $start )) >> $out_file
     echo +++ END >> $out_file
 done
