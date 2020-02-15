@@ -600,7 +600,6 @@ printf("run 1");
 		gpuErrchk(cudaMemcpy(d_multi_struct, &h_multi_struct_2, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
 		//showMem();
 		solve << <per_gpu_files, 1 >> > (d_multi_struct);
-	}
     
 	// cudaEvent_t d_start, d_stop;
 	// cudaEventCreate(&d_start);
