@@ -615,6 +615,9 @@ init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, 
 		//showMem();
 		solve << <per_gpu_files, 1 >> > (d_multi_struct);
 
+		cudaDeviceSynchronize();
+		cudaDeviceReset();
+
 		printf("run 2");
 		cudaSetDevice(1);
 		solver** d_multi_struct2;
@@ -622,6 +625,9 @@ init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, 
 		gpuErrchk(cudaMemcpy(d_multi_struct2, &h_multi_struct_2, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
 		//showMem();
 		solve << <per_gpu_files, 1 >> > (d_multi_struct2);
+
+		cudaDeviceSynchronize();
+		cudaDeviceReset();
     
 	// cudaEvent_t d_start, d_stop;
 	// cudaEventCreate(&d_start);
@@ -642,7 +648,7 @@ init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, 
 	//printf("\n total solve time -> %f s\n", elapsedTime / 1000000);
 	// exec_metrics.solve_time = elapsedTime;
 	exec_metrics.solve_time = 0;
-	cudaDeviceSynchronize();
+	//cudaDeviceSynchronize();
 
 	cudaDeviceReset();
 
