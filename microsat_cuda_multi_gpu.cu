@@ -589,7 +589,8 @@ int main(int argc, char** argv) {
 	// 	//showMem();
 	// 	solve << <per_gpu_files, 1 >> > (d_multi_struct);
 	// }
-printf("run 1");
+		printf("run 1");
+		cudaSetDevice(0);
 		solver** d_multi_struct;
 		gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
 		gpuErrchk(cudaMemcpy(d_multi_struct, &h_multi_struct_1, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
@@ -597,9 +598,12 @@ printf("run 1");
 		solve << <per_gpu_files, 1 >> > (d_multi_struct);
 
 		printf("run 2");
-		gpuErrchk(cudaMemcpy(d_multi_struct, &h_multi_struct_2, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
+		cudaSetDevice(1);
+		solver** d_multi_struct2;
+		gpuErrchk(cudaMalloc((void**)&d_multi_struct2, per_gpu_files * sizeof(solver*)));
+		gpuErrchk(cudaMemcpy(d_multi_struct2, &h_multi_struct_2, per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
 		//showMem();
-		solve << <per_gpu_files, 1 >> > (d_multi_struct);
+		solve << <per_gpu_files, 1 >> > (d_multi_struct2);
     
 	// cudaEvent_t d_start, d_stop;
 	// cudaEventCreate(&d_start);
