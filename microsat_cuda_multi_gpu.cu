@@ -599,13 +599,13 @@ init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, 
 	exec_metrics.parse_time = (clock() - start_parse);
 
 	printf("\n SOLVE \n");
-	for (int i = 0; i < gpu_count; i++) {
-		cudaSetDevice(i);
-		solver** d_multi_struct;
-		gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
-		gpuErrchk(cudaMemcpy(d_multi_struct, &h_multi_struct[i], per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
-		solve << <per_gpu_files, 1 >> > (d_multi_struct);
-	}
+	// for (int i = 0; i < gpu_count; i++) {
+	// 	cudaSetDevice(i);
+	// 	solver** d_multi_struct;
+	// 	gpuErrchk(cudaMalloc((void**)&d_multi_struct, per_gpu_files * sizeof(solver*)));
+	// 	gpuErrchk(cudaMemcpy(d_multi_struct, &h_multi_struct[i], per_gpu_files * sizeof(solver*), cudaMemcpyHostToDevice));    
+	// 	solve << <per_gpu_files, 1 >> > (d_multi_struct);
+	// }
 
 		printf("run 1");
 		cudaSetDevice(0);
