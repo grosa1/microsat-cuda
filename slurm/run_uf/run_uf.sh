@@ -1,0 +1,10 @@
+sbatch -p gtx1080 --gres=gpu:1 run_uf20.slurm > job_ids.txt
+sbatch -p gtx1080 --gres=gpu:1 run_uf50.slurm >> job_ids.txt
+sbatch -p gtx1080 --gres=gpu:1 run_uf75.slurm >> job_ids.txt
+sbatch -p gtx1080 --gres=gpu:1 run_uf100.slurm >> job_ids.txt
+sbatch -p gtx1080 --gres=gpu:1 run_uf125.slurm >> job_ids.txt
+sbatch -p gtx1080 --gres=gpu:1 run_uf150.slurm >> job_ids.txt
+sbatch -p gtx1080 --gres=gpu:1 run_uf175.slurm >> job_ids.txt
+sbatch -p gtx1080 --gres=gpu:1 run_uf200.slurm >> job_ids.txt
+sbatch -p gtx1080 --gres=gpu:1 run_uf225.slurm >> job_ids.txt
+sbatch -p gtx1080 --gres=gpu:1 run_uf250.slurm >> job_ids.txt
