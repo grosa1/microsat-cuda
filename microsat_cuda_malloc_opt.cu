@@ -585,8 +585,6 @@ int main(int argc, char** argv) {
 	exec_metrics.solve_time = elapsedTime;
 	cudaDeviceSynchronize();
 
-	cudaDeviceReset();
-
 	end = clock();
 	//printf("\n total time: %f s\n", (float)(end - start) / 1000000);
 	exec_metrics.tot_time = (float)(end - start);
@@ -595,5 +593,8 @@ int main(int argc, char** argv) {
     printf("files count: %d\nparse time (s): %f\ncuda init time (s): %f\ncuda solve time (s): %f\ntot time (s): %f\n\n", exec_metrics.files_count, exec_metrics.parse_time / CLOCKS_PER_SEC, exec_metrics.init_time / 1000, exec_metrics.solve_time / 1000, exec_metrics.tot_time / CLOCKS_PER_SEC);
 	//printf ("c statistics of %s: mem: %i conflicts: %i max_lemmas: %i\n", argv[1], S.mem_used, S.nConflicts, S.maxLemmas);
 	//printf("\n END \n");
+	
+	cudaDeviceReset();
+	
 	return 0;
 }
