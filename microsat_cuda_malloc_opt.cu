@@ -399,7 +399,7 @@ int main(int argc, char** argv) {
 	int db_max_mem = atoi(argv[2]);
 	int clause_learn_max_mem = atoi(argv[3]);
 	int initial_max_mem = atoi(argv[4]);
-	printf("DB_MAX_MEM: %d\n", db_max_mem * 8);
+	printf("DB_MAX_MEM: %d\n", db_max_mem);
 	printf("CLAUSE_LEARN_MAX_MEM: %d\n", clause_learn_max_mem);
 	printf("INITIAL_MAX_LEMMAS: %d\n", initial_max_mem);
 
