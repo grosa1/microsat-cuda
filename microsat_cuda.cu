@@ -382,8 +382,9 @@ int main(int argc, char** argv) {
     if (argc < 5) {
         printf("USAGE: ./mcuda <formulas dir> <DB_MAX_MEM> <CLAUSE_LEARN_MAX_MEM> <INITIAL_MAX_LEMMAS>\n");
         return 0;
-    }
+	}
 	
+	cudaDeviceReset();
 	showMem();
 
 	//char* directory = "C://microsat//sat";

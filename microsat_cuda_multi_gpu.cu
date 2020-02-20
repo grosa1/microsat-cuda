@@ -381,7 +381,7 @@ static void read_until_new_line(FILE* input) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 5) {
+    if (argc < 6) {
         printf("USAGE: ./mcuda <formulas dir> <DB_MAX_MEM> <CLAUSE_LEARN_MAX_MEM> <INITIAL_MAX_LEMMAS> <GPU_COUNT>\n");
         return 0;
 	}
@@ -407,6 +407,7 @@ int main(int argc, char** argv) {
 
 	for (int i = 0; i < gpu_count; i++) {
 		cudaSetDevice(i);
+		cudaDeviceReset();
 		printf("gpu %d=", i);
 		showMem();
 	}
@@ -431,8 +432,6 @@ int main(int argc, char** argv) {
 	int mem = sizeof(int) * db_max_mem; //TODO: allocazione dinamica della memoria
 
 	solver **h_multi_struct[gpu_count];
-	// solver **h_multi_struct_1 = (solver**)malloc(per_gpu_files * sizeof(solver*));
-	// solver **h_multi_struct_2 = (solver**)malloc(per_gpu_files * sizeof(solver*));
 	int *db[gpu_count];
 	for (int i = 0; i < gpu_count; i++) {
 		cudaSetDevice(i);
@@ -543,15 +542,8 @@ int main(int argc, char** argv) {
 		cudaEventRecord(d_start_init, 0);
 		// init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, &(db[count * mem]), dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
 		int* db_offset = db[current_gpu_id] + (db_max_mem * processed_per_gpu);
-// 		int* db_offset;
-// if(current_gpu_id == 0) {
-// 			db_offset = db_1+ (db_max_mem * processed_per_gpu);
 
-// } else {
-// 			db_offset = db_2 + (db_max_mem * processed_per_gpu);
-
-// }
-init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, mem, clause_learn_max_mem, initial_max_mem);
+		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, mem, clause_learn_max_mem, initial_max_mem);
 
 		
 		cudaEventRecord(d_stop_init, 0);

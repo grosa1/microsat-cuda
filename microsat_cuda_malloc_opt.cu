@@ -386,6 +386,7 @@ int main(int argc, char** argv) {
         return 0;
 	}
 	
+	cudaDeviceReset();
 	showMem();
     
 	//char* directory = "C://microsat//sat";
