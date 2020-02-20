@@ -6,7 +6,7 @@ log_name=$3
 mem=$4
 learn_mem=$5
 learn_clauses=$6
-mkdir jobs/$log_name
+mkdir -p jobs/$log_name
 
 for f in $dir/*; do
     formula_size=${dir#*/}
