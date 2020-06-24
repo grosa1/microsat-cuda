@@ -438,8 +438,7 @@ int main(int argc, char** argv) {
 
 	
 	int* db;
-	// //int mem = 100000; //TODO: allocazione dinamica della memoria
-	int mem = sizeof(int) * db_max_mem; //TODO: allocazione dinnum_fileamica della memoria
+	int mem = sizeof(int) * db_max_mem; //TODO: allocazione dinamica della memoria
 	gpuErrchk(cudaMalloc((void**)&db, mem * num_file));
 	// showMem();
 
@@ -467,11 +466,6 @@ int main(int argc, char** argv) {
 
 		struct solver* dev_s;
 		gpuErrchk(cudaMalloc((void**)&dev_s, sizeof(solver)));
-
-		// int* db;
-		// // //int mem = 100000; //TODO: allocazione dinamica della memoria
-		// int mem = db_max_mem; //TODO: allocazione dinamica della memoria
-		// gpuErrchk(cudaMalloc((void**)&db, sizeof(int) * mem));
 
 		struct stat st;
 		stat(path, &st);
@@ -532,7 +526,6 @@ int main(int argc, char** argv) {
 		cudaEventCreate(&d_stop_init);
 
 		cudaEventRecord(d_start_init, 0);
-		// init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, &(db[count * mem]), dev_file_id, db_max_mem, clause_learn_max_mem, initial_max_mem);
 		int* db_offset = db + (db_max_mem * count);
 		init << <1, 1 >> > (dev_s, dev_elements, nElements, nVars, nClauses, db_offset, dev_file_id, mem, clause_learn_max_mem, initial_max_mem);
 		cudaEventRecord(d_stop_init, 0);
