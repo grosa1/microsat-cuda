@@ -223,11 +223,14 @@ Contributions are what make the open source community such an amazing place to b
 
 
 <!-- LICENSE -->
-## License
+## Original License(s)
 
 The contents of this repository are distributed under the MIT license. See below for details:
 
 ```
+Original work: Copyright © 2014-2018 Marijn Heule
+Contributions: Copyright © 2018 Armin Biere
+
 The MIT License (MIT)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
