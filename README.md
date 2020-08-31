@@ -38,10 +38,14 @@
     <img src="images/logo.png" alt="Logo" width="80" height="80">
   </a>
 -->
-  <h3 align="center">MicroSAT-CUDA</h3>
 
-  <p align="center">
-A CUDA porting of MicroSAT https://github.com/marijnheule/microsat
+  <!-- TITLE -->
+  <h3 align="center">MicroSAT-CUDA</h3>
+  
+  <!-- SUB-TITLE -->
+  <p align="center">A CUDA porting of MicroSAT https://github.com/marijnheule/microsat</p>
+
+<p align="justify">
 
 MicroSAT is a simple CDCL SAT solver, originally created by [MarijnHeule and Armin Biere](https://github.com/marijnheule/microsat). It aims at being very short (300 lines of code in-cluding comments) and has neither position saving nor blocking literals. Based on the CDCL procedure, performs unit propagation using two-watched literals and is extremely fast in solving small formulas.
 
@@ -63,8 +67,8 @@ For further details, please refer to [report](https://github.com/grosa1/microsat
     ·
     <a href="https://github.com/github_username/repo_name/issues">Request Feature</a>
   </p>
-</p>
 -->
+</p>
 
 
 <!-- TABLE OF CONTENTS -->
@@ -75,6 +79,7 @@ For further details, please refer to [report](https://github.com/grosa1/microsat
 * [Usage](#usage)
   * [Supported params](#supported-params)
   * [Build and run](#build-and-run)
+  * [Utils](#utils)
 * [Roadmap](#roadmap)
 * [Contributing](#contributing)
 * [License](#license)
