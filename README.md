@@ -73,6 +73,8 @@ For further details, please refer to [report]().
 * [Getting Started](#getting-started)
   * [Prerequisites](#prerequisites)
 * [Usage](#usage)
+  * [Supported params](#supported-params)
+  * [Build and run](#build-and-run)
 * [Roadmap](#roadmap)
 * [Contributing](#contributing)
 * [License](#license)
@@ -160,7 +162,8 @@ The process is the same for **MicroSAT-CUDAv2** (`microsat_cuda_malloc_opt.cu`) 
   * `INITIAL_MAX_LEMMAS`, set the initial threshold for lemmas. It directly affects the growth of the clause database;
   * `GPU_COUNT` (only for v3), set the number of GPUs to be used by the solver.
 
-### There are mainly 3 versions of MicroSAT-CUDA:
+### Build and run
+There are mainly 3 versions of MicroSAT-CUDA:
 
 * **MicroSAT-CUDAv1** (`microsat_cuda.cu`), which is the first version that uses a different mem area for each formula:
 ``` 
