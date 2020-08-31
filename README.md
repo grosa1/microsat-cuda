@@ -38,10 +38,14 @@
     <img src="images/logo.png" alt="Logo" width="80" height="80">
   </a>
 -->
-  <h3 align="center">MicroSAT-CUDA</h3>
 
-  <p align="center">
-CUDA porting of MicroSAT https://github.com/marijnheule/microsat
+  <!-- TITLE -->
+  <h3 align="center">MicroSAT-CUDA</h3>
+  
+  <!-- SUB-TITLE -->
+  <p align="center">A CUDA porting of MicroSAT https://github.com/marijnheule/microsat</p>
+
+<p align="justify">
 
 MicroSAT is a simple CDCL SAT solver, originally created by [MarijnHeule and Armin Biere](https://github.com/marijnheule/microsat). It aims at being very short (300 lines of code in-cluding comments) and has neither position saving nor blocking literals. Based on the CDCL procedure, performs unit propagation using two-watched literals and is extremely fast in solving small formulas.
 
@@ -50,7 +54,7 @@ We made a port for CUDA GPUs, to test its performance in parallel resolution of 
 The `dimacs` folder contains SAT and UNSAT formulas in [DIMACS](https://logic.pdmi.ras.ru/~basolver/dimacs.html) format ready to be used with MicroSAT-CUDA. The formulas are generated using a CNF formula generator ([CNFgen](https://github.com/MassimoLauria/cnfgen)).
 A different DIMACS generator can be found at https://toughsat.appspot.com/.
 
-For further details, please refer to [report]().
+For further details, please refer to [report](https://github.com/grosa1/microsat-cuda/blob/master/report/microsat_cuda_report.pdf).
 
 <!--
     <br />
@@ -63,8 +67,8 @@ For further details, please refer to [report]().
     ·
     <a href="https://github.com/github_username/repo_name/issues">Request Feature</a>
   </p>
-</p>
 -->
+</p>
 
 
 <!-- TABLE OF CONTENTS -->
@@ -75,6 +79,7 @@ For further details, please refer to [report]().
 * [Usage](#usage)
   * [Supported params](#supported-params)
   * [Build and run](#build-and-run)
+  * [Utils](#utils)
 * [Roadmap](#roadmap)
 * [Contributing](#contributing)
 * [License](#license)
@@ -160,7 +165,7 @@ The process is the same for **MicroSAT-CUDAv2** (`microsat_cuda_malloc_opt.cu`) 
   * `DB_MAX_MEM`, set the memory db used by the solver to store clauses and variable assignments;
   * `CLAUSE_LEARN_MAX_MEM`, set the maxium memory that can ve used for clause learning;
   * `INITIAL_MAX_LEMMAS`, set the initial threshold for lemmas. It directly affects the growth of the clause database;
-  * `GPU_COUNT` (only for v3), set the number of GPUs to be used by the solver.
+  * `GPU_COUNT` (_only for v3_), set the number of GPUs to be used by the solver.
 
 ### Build and run
 There are mainly 3 versions of MicroSAT-CUDA:
@@ -194,13 +199,13 @@ nvcc -o mcudav3 .\microsat_cuda_multi_gpu.cu
 
 ### Utils
 * In `slurm` folder, there are the SLURM config files used for the test executed on [Iridis 5](https://www.southampton.ac.uk/isolutions/staff/iridis.page) cluster.
-* In `script` folder, there are the script used for the execution of the tests that also can be executed on a normal PC.
+* In `script` folder, there are the script that can be used for the replication of the experiment described in the [report](https://github.com/grosa1/microsat-cuda/blob/master/report/microsat_cuda_report.pdf).
 
 
 <!-- ROADMAP -->
 ## Roadmap
 
-See the [open issues](https://github.com/github_username/repo_name/issues) for a list of proposed features (and known issues).
+See the [open issues](https://github.com/grosa1/microsat-cuda/issues) for a list of proposed features (and known issues).
 
 
 
