@@ -165,7 +165,7 @@ The process is the same for **MicroSAT-CUDAv2** (`microsat_cuda_malloc_opt.cu`) 
   * `DB_MAX_MEM`, set the memory db used by the solver to store clauses and variable assignments;
   * `CLAUSE_LEARN_MAX_MEM`, set the maxium memory that can ve used for clause learning;
   * `INITIAL_MAX_LEMMAS`, set the initial threshold for lemmas. It directly affects the growth of the clause database;
-  * `GPU_COUNT` (only for v3), set the number of GPUs to be used by the solver.
+  * `GPU_COUNT` (_only for v3_), set the number of GPUs to be used by the solver.
 
 ### Build and run
 There are mainly 3 versions of MicroSAT-CUDA:
