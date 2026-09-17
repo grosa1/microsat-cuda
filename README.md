@@ -13,7 +13,6 @@
 
 
 
-
 <!-- PROJECT SHIELDS -->
 <!--
 *** I'm using markdown "reference style" links for readability.
@@ -130,7 +129,7 @@ To get a local copy up and running follow these simple steps.
 
 * C compilers
 * CUDA drivers, to run `nvcc` command required for build
-* On Windows, you need to install `dirent.h` which is used to list input files
+* On Windows, `include/dirent.h` is provided and is used to list input files
 * An IDE that supports CUDA, for example:
   * [Visual Studio with CUDA plugin](https://visualstudio.microsoft.com/it/)
   * [Eclipse Nsight](https://developer.nvidia.com/nsight-visual-studio-edition)
